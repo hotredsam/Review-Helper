@@ -39,7 +39,7 @@ export function PlanPane({ project }: { project: Project }) {
   const onRebuild = () => {
     if (
       window.confirm(
-        "Rebuild regenerates the plan from scratch and does NOT carry over your phase completion. Use “Update plan” to weave in changes while keeping progress. Rebuild anyway?",
+        "Rebuild regenerates the plan from scratch: phase completion is reset to not-started, and pending inbox ideas are NOT incorporated. Use “Update plan” instead to keep your progress and weave in ideas. Rebuild anyway?",
       )
     ) {
       void rebuild(project.id);

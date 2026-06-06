@@ -38,7 +38,7 @@ export interface PlanView {
 export type AnalysisEvent =
   | { type: "started"; project_id: number }
   | { type: "tool"; project_id: number; name: string }
-  | { type: "done"; project_id: number; version: number; confidence: string; phases: number }
+  | { type: "done"; project_id: number; version: number; confidence: string; phases: number; source: string }
   | { type: "failed"; project_id: number; detail: string };
 
 /** Kick off read-only analysis of the project's clone into a first plan. */

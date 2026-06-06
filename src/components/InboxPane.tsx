@@ -26,6 +26,7 @@ export function InboxPane({ project }: { project: Project }) {
   const add = useFeaturesStore((s) => s.add);
   const setStatus = useFeaturesStore((s) => s.setStatus);
   const updatePlan = usePlanStore((s) => s.update);
+  const planBusy = usePlanStore((s) => s.analysis[id] === "running");
 
   const [title, setTitle] = useState("");
   const [micNote, setMicNote] = useState<string | null>(null);
@@ -96,9 +97,10 @@ export function InboxPane({ project }: { project: Project }) {
           <button
             type="button"
             onClick={() => void updatePlan(id)}
-            className="shrink-0 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-fg hover:bg-accent-hover"
+            disabled={planBusy}
+            className="shrink-0 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
           >
-            Update plan
+            {planBusy ? "Updating…" : "Update plan"}
           </button>
         </div>
       )}

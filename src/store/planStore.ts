@@ -140,8 +140,8 @@ function handle(e: AnalysisEvent) {
       usePlanStore.setState((s) => ({ analysis: { ...s.analysis, [id]: "idle" } }));
       void usePlanStore.getState().loadPlan(id);
       void usePlanStore.getState().loadAudit(id);
-      // A merge may have marked inbox features in_plan — refresh the inbox too.
-      void useFeaturesStore.getState().load(id);
+      // Only an update touches the inbox (marks features in_plan); refresh it then.
+      if (e.source === "update") void useFeaturesStore.getState().load(id);
       break;
     case "failed":
       usePlanStore.setState((s) => ({

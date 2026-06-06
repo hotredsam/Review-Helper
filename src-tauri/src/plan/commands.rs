@@ -23,6 +23,7 @@ pub enum AnalysisEvent {
         version: i64,
         confidence: String,
         phases: usize,
+        source: String,
     },
     Failed { project_id: i64, detail: String },
 }
@@ -151,13 +152,7 @@ fn generate_plan(app: AppHandle, project_id: i64, req: ModelRequest, source: &st
 
     let db = app.state::<Db>();
     let saved = match db.0.lock() {
-        Ok(mut conn) => {
-            let v = store::save_generated_plan(&mut conn, project_id, &plan);
-            if let Ok(version) = &v {
-                let _ = crate::audit::record(&conn, project_id, *version, source);
-            }
-            v
-        }
+        Ok(mut conn) => commit_fresh(&mut conn, project_id, &plan, source),
         Err(e) => Err(e.to_string()),
     };
     match saved {
@@ -166,9 +161,35 @@ fn generate_plan(app: AppHandle, project_id: i64, req: ModelRequest, source: &st
             version,
             confidence,
             phases,
+            source: source.to_string(),
         }),
         Err(detail) => emit(AnalysisEvent::Failed { project_id, detail }),
     }
+}
+
+/// Save a fresh plan version + record its audit entry atomically (analyze /
+/// kickoff / rebuild — no status carry).
+fn commit_fresh(conn: &mut Connection, project_id: i64, plan: &parse::GeneratedPlan, source: &str) -> Result<i64, String> {
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let version = store::save_into_tx(&tx, project_id, plan)?;
+    crate::audit::record(&tx, project_id, version, source)?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(version)
+}
+
+/// Save the merged plan, carry completion forward, mark incorporated features
+/// in_plan, and record the audit entry — all in ONE transaction so a failure
+/// can't leave a persisted plan with reset progress or a stale inbox.
+fn commit_merge(conn: &mut Connection, project_id: i64, plan: &parse::GeneratedPlan, feature_ids: &[i64]) -> Result<i64, String> {
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let version = store::save_into_tx(&tx, project_id, plan)?;
+    let _warnings = store::carry_into_tx(&tx, project_id, version)?;
+    for fid in feature_ids {
+        crate::features::set_status(&tx, project_id, *fid, "in_plan")?;
+    }
+    crate::audit::record(&tx, project_id, version, "update")?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(version)
 }
 
 /// Incrementally UPDATE the plan: weave approved answers + pending features into
@@ -207,6 +228,10 @@ pub fn update_plan(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Result
             })
             .collect();
         let feature_ids: Vec<i64> = feats.iter().map(|f| f.id).collect();
+
+        if feature_lines.is_empty() && answers.is_empty() {
+            return Err("No new ideas or answers to incorporate — add to the inbox or answer questions first.".into());
+        }
 
         let mut req = ModelRequest::planning(prompts::merge_user(&summary, &answers, &feature_lines));
         req.system_append = Some(format!("{}\n\n{}", prompts::MERGE_SYSTEM, ctx.to_prompt()));
@@ -254,25 +279,18 @@ fn run_merge(app: AppHandle, project_id: i64, req: ModelRequest, feature_ids: Ve
     let phases = plan.phases.len();
 
     let db = app.state::<Db>();
-    let result: Result<i64, String> = match db.0.lock() {
-        Ok(mut conn) => match store::save_generated_plan(&mut conn, project_id, &plan) {
-            Ok(version) => match store::carry_status(&mut conn, project_id, version) {
-                Ok(()) => {
-                    // Mark the incorporated features in_plan — resets the pending count.
-                    for fid in &feature_ids {
-                        let _ = crate::features::set_status(&conn, project_id, *fid, "in_plan");
-                    }
-                    let _ = crate::audit::record(&conn, project_id, version, "update");
-                    Ok(version)
-                }
-                Err(e) => Err(e),
-            },
-            Err(e) => Err(e),
-        },
+    let result = match db.0.lock() {
+        Ok(mut conn) => commit_merge(&mut conn, project_id, &plan, &feature_ids),
         Err(e) => Err(e.to_string()),
     };
     match result {
-        Ok(version) => emit(AnalysisEvent::Done { project_id, version, confidence, phases }),
+        Ok(version) => emit(AnalysisEvent::Done {
+            project_id,
+            version,
+            confidence,
+            phases,
+            source: "update".to_string(),
+        }),
         Err(detail) => emit(AnalysisEvent::Failed { project_id, detail }),
     }
 }
@@ -302,7 +320,8 @@ pub fn rebuild_plan(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Resul
             None => {
                 let desc = stored_description(&conn, project_id)?;
                 let mut req = ModelRequest::planning(prompts::kickoff_user(&desc));
-                req.system_append = Some(prompts::KICKOFF_SYSTEM.to_string());
+                // Include context so a rebuild keeps prior answers/decisions, not blank.
+                req.system_append = Some(format!("{}\n\n{}", prompts::KICKOFF_SYSTEM, context));
                 req
             }
         }

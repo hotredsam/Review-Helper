@@ -25,6 +25,12 @@ pub fn record(conn: &Connection, project_id: i64, version: i64, source: &str) ->
         .query_row("SELECT datetime('now')", [], |r| r.get(0))
         .map_err(|e| e.to_string())?;
     entries.push(AuditEntry { version, source: source.to_string(), at });
+    // FIFO cap so the kv cell + read-modify-write stay bounded.
+    const MAX_ENTRIES: usize = 50;
+    if entries.len() > MAX_ENTRIES {
+        let drop = entries.len() - MAX_ENTRIES;
+        entries.drain(0..drop);
+    }
     let json = serde_json::to_string(&entries).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
