@@ -108,8 +108,26 @@ pub fn parse_assessment(raw: &str) -> Result<Value, String> {
     Ok(v)
 }
 
-fn clamp_overall(v: &Value, key: &str) -> i64 {
-    v.get(key).and_then(Value::as_i64).unwrap_or(0).clamp(0, 100)
+/// The overall score: the model's value if present, else the average of the
+/// group's sub-scores — so a missing `*_overall` isn't shown as a silent red 0.
+pub(crate) fn overall_score(v: &Value, overall_key: &str, group_key: &str) -> i64 {
+    if let Some(n) = v.get(overall_key).and_then(Value::as_i64) {
+        return n.clamp(0, 100);
+    }
+    let scores: Vec<i64> = v
+        .get(group_key)
+        .and_then(Value::as_object)
+        .map(|o| {
+            o.values()
+                .filter_map(|d| d.get("score").and_then(Value::as_i64))
+                .collect()
+        })
+        .unwrap_or_default();
+    if scores.is_empty() {
+        0
+    } else {
+        (scores.iter().sum::<i64>() / scores.len() as i64).clamp(0, 100)
+    }
 }
 
 /// Persist an assessment, tied to the project's latest plan version.
@@ -127,7 +145,7 @@ pub fn save_assessment(conn: &Connection, project_id: i64, a: &Value) -> Result<
     let dimensions = a.get("dimensions").cloned().unwrap_or(Value::Null).to_string();
     let production = serde_json::json!({
         "scores": a.get("production").cloned().unwrap_or(Value::Null),
-        "overall": clamp_overall(a, "production_overall"),
+        "overall": overall_score(a, "production_overall", "production"),
     })
     .to_string();
     let top_fixes = a
@@ -144,7 +162,7 @@ pub fn save_assessment(conn: &Connection, project_id: i64, a: &Value) -> Result<
     conn.execute(
         "INSERT INTO assessments (project_id, plan_version, dimension_scores, overall, production_readiness, hygiene, top_fixes) \
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![project_id, plan_version, dimensions, clamp_overall(a, "dimensions_overall"), production, hygiene, top_fixes],
+        params![project_id, plan_version, dimensions, overall_score(a, "dimensions_overall", "dimensions"), production, hygiene, top_fixes],
     )
     .map_err(|e| e.to_string())?;
     Ok(())

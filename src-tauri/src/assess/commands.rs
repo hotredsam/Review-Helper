@@ -33,22 +33,30 @@ pub fn assess_project(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Res
         return Err("The clone is missing on disk. Refresh the clone, then assess.".into());
     }
 
-    // Deterministic scan first (fast subprocess), then hand the facts to the model.
-    let scan = run_scan(&clone_path)?;
-    let mut req = ModelRequest::planning(assess_user(&scan));
-    req.system_append = Some(ASSESS_SYSTEM.to_string());
-    req.cwd = Some(clone_path);
-
+    // All heavy work (scan + model) happens off the IPC thread so the command
+    // returns instantly and every failure flows through one channel (events).
     let app = app.clone();
-    std::thread::spawn(move || run_assessment(app, project_id, req));
+    std::thread::spawn(move || run_assessment(app, project_id, clone_path));
     Ok(())
 }
 
-fn run_assessment(app: AppHandle, project_id: i64, req: ModelRequest) {
+fn run_assessment(app: AppHandle, project_id: i64, clone_path: String) {
     let emit = |ev: AssessmentEvent| {
         let _ = app.emit("assessment-event", &ev);
     };
     emit(AssessmentEvent::Started { project_id });
+
+    // Deterministic scan first, then hand the facts to the model.
+    let scan = match run_scan(&clone_path) {
+        Ok(s) => s,
+        Err(detail) => {
+            emit(AssessmentEvent::Failed { project_id, detail });
+            return;
+        }
+    };
+    let mut req = ModelRequest::planning(assess_user(&scan));
+    req.system_append = Some(ASSESS_SYSTEM.to_string());
+    req.cwd = Some(clone_path);
 
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;
@@ -82,11 +90,7 @@ fn run_assessment(app: AppHandle, project_id: i64, req: ModelRequest) {
             return;
         }
     };
-    let overall = assessment
-        .get("dimensions_overall")
-        .and_then(|x| x.as_i64())
-        .unwrap_or(0)
-        .clamp(0, 100);
+    let overall = super::overall_score(&assessment, "dimensions_overall", "dimensions");
 
     let db = app.state::<Db>();
     let saved = match db.0.lock() {

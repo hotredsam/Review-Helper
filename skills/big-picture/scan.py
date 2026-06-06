@@ -12,7 +12,8 @@ SECRET = re.compile(r"\bsk-[A-Za-z0-9_-]{20,}|\bgh[posru]_[A-Za-z0-9]{30,}|\bAKI
 TODO = re.compile(r"\b(TODO|FIXME|HACK|XXX)\b")
 
 def walk(root):
-    for dp, dns, fns in os.walk(root):
+    # followlinks=False: don't descend into symlinked directories.
+    for dp, dns, fns in os.walk(root, followlinks=False):
         dns[:] = [d for d in dns if d not in SKIP_DIR]
         for fn in fns:
             yield os.path.join(dp, fn)
@@ -24,6 +25,10 @@ def main(argv):
     src = [f for f in files if os.path.splitext(f)[1] in SRC_EXT]
     big, total_src_lines, todos, secret_hits = [], 0, 0, []
     for f in src:
+        # Never read symlinked files: in an untrusted clone a tracked symlink
+        # could point outside the repo (e.g. ~/.ssh/id_rsa) and leak its content.
+        if os.path.islink(f):
+            continue
         try:
             lines = open(f, errors="ignore").read().splitlines()
         except Exception:

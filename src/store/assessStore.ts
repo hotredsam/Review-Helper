@@ -18,7 +18,7 @@ interface AssessStore {
   assess: (id: number) => Promise<void>;
 }
 
-export const useAssessStore = create<AssessStore>((set) => ({
+export const useAssessStore = create<AssessStore>((set, get) => ({
   assessments: {},
   status: {},
   progress: {},
@@ -29,11 +29,13 @@ export const useAssessStore = create<AssessStore>((set) => ({
       const a = await getAssessment(id);
       set((s) => ({ assessments: { ...s.assessments, [id]: a } }));
     } catch (e) {
-      set((s) => ({ error: { ...s.error, [id]: String(e) } }));
+      // Surface an error state — never leave a silent spinner.
+      set((s) => ({ status: { ...s.status, [id]: "error" }, error: { ...s.error, [id]: String(e) } }));
     }
   },
 
   assess: async (id) => {
+    if (get().status[id] === "running") return; // don't double-spend a run
     set((s) => ({
       status: { ...s.status, [id]: "running" },
       progress: { ...s.progress, [id]: [] },

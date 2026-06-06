@@ -21,7 +21,7 @@ interface PlanStore {
   kickoff: (id: number, description: string) => Promise<void>;
 }
 
-export const usePlanStore = create<PlanStore>((set) => ({
+export const usePlanStore = create<PlanStore>((set, get) => ({
   plans: {},
   analysis: {},
   progress: {},
@@ -32,11 +32,13 @@ export const usePlanStore = create<PlanStore>((set) => ({
       const plan = await getPlan(id);
       set((s) => ({ plans: { ...s.plans, [id]: plan } }));
     } catch (e) {
-      set((s) => ({ error: { ...s.error, [id]: String(e) } }));
+      // Surface an error state — never leave a silent spinner.
+      set((s) => ({ analysis: { ...s.analysis, [id]: "error" }, error: { ...s.error, [id]: String(e) } }));
     }
   },
 
   analyze: async (id) => {
+    if (get().analysis[id] === "running") return; // don't double-spend a run
     set((s) => ({
       analysis: { ...s.analysis, [id]: "running" },
       progress: { ...s.progress, [id]: [] },
@@ -53,6 +55,7 @@ export const usePlanStore = create<PlanStore>((set) => ({
   },
 
   kickoff: async (id, description) => {
+    if (get().analysis[id] === "running") return; // don't double-spend a run
     set((s) => ({
       analysis: { ...s.analysis, [id]: "running" },
       progress: { ...s.progress, [id]: [] },
