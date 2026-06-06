@@ -33,6 +33,7 @@
   --color-danger-fg: var(--danger-fg);
 
   --color-ring: var(--ring);
+  --color-scrim: var(--scrim);
 }
 
 :root {

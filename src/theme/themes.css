@@ -34,6 +34,7 @@
   --danger-fg: #ffffff;
 
   --ring: #2563eb;
+  --scrim: rgb(15 18 23 / 0.40);
 }
 
 [data-theme="dark"] {
@@ -61,6 +62,7 @@
   --danger-fg: #ffffff;
 
   --ring: #3b82f6;
+  --scrim: rgb(0 0 0 / 0.55);
 }
 
 [data-theme="midnight"] {
@@ -88,6 +90,7 @@
   --danger-fg: #2a0511;
 
   --ring: #22d3ee;
+  --scrim: rgb(2 6 23 / 0.60);
 }
 
 [data-theme="sand"] {
@@ -115,4 +118,5 @@
   --danger-fg: #fef2f2;
 
   --ring: #c2410c;
+  --scrim: rgb(40 30 18 / 0.40);
 }
