@@ -1,10 +1,11 @@
 import { useEffect, type ReactNode } from "react";
 import { Loader2, MessageSquareQuote, AlertTriangle, Sparkles } from "lucide-react";
-import { useGrillStore, ensureGrillListener } from "../store/grillStore";
+import { useGrillStore, ensureGrillListener, computeCoverage } from "../store/grillStore";
 import { QuestionCard } from "./QuestionCard";
+import { CoverageMeter } from "./CoverageMeter";
+import { DepthSlider, DEFAULT_DEPTH } from "./DepthSlider";
 import type { Project } from "../api/projects";
 
-const DEFAULT_DEPTH = 3;
 const ACTIVE_AT_ONCE = 5;
 
 function statusLabel(status: string): string {
@@ -33,6 +34,7 @@ export function GrillPane({ project }: { project: Project }) {
   const error = useGrillStore((s) => s.error[id]);
   const load = useGrillStore((s) => s.load);
   const generate = useGrillStore((s) => s.generate);
+  const depth = useGrillStore((s) => s.depth[id] ?? DEFAULT_DEPTH);
 
   useEffect(() => {
     ensureGrillListener();
@@ -62,7 +64,7 @@ export function GrillPane({ project }: { project: Project }) {
         <p className="max-w-sm text-sm text-danger" role="alert">
           {error ?? "Grilling failed."}
         </p>
-        <GenerateButton onClick={() => void generate(id, DEFAULT_DEPTH)} label="Try again" />
+        <GenerateButton onClick={() => void generate(id, depth)} label="Try again" />
       </Center>
     );
   }
@@ -84,7 +86,8 @@ export function GrillPane({ project }: { project: Project }) {
           Review Helper writes sharp, repo-specific questions — each with a recommended answer — to
           pin down what you're building.
         </p>
-        <GenerateButton onClick={() => void generate(id, DEFAULT_DEPTH)} label="Start grilling" />
+        <DepthSlider projectId={id} />
+        <GenerateButton onClick={() => void generate(id, depth)} label="Start grilling" />
       </Center>
     );
   }
@@ -92,19 +95,20 @@ export function GrillPane({ project }: { project: Project }) {
   const open = questions.filter((q) => q.status === "open");
   const active = open.slice(0, ACTIVE_AT_ONCE);
   const addressed = questions.filter((q) => q.status !== "open");
+  const cov = computeCoverage(questions);
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-          {open.length} open · {addressed.length} addressed
-        </h2>
+      <CoverageMeter cov={cov} />
+
+      <div className="flex items-center justify-between gap-3">
+        <DepthSlider projectId={id} />
         <button
           type="button"
-          onClick={() => void generate(id, DEFAULT_DEPTH)}
+          onClick={() => void generate(id, depth)}
           className="rounded-md border border-border px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-2"
         >
-          Ask more
+          {cov.done ? "Go deeper" : "Ask more"}
         </button>
       </div>
 

@@ -108,6 +108,38 @@ function handle(e: GrillEvent) {
   }
 }
 
+export interface Coverage {
+  total: number;
+  addressed: number;
+  open: number;
+  done: boolean;
+  byDimension: { dimension: string; total: number; addressed: number }[];
+}
+
+const ADDRESSED = new Set(["answered", "not_relevant", "unknown"]);
+
+/**
+ * Detail-coverage saturation: answered AND dismissed both count as addressed.
+ * "Done grilling" = at least one question and none still open. Adding more
+ * questions (raising depth, or a new feature in a later phase) re-opens it.
+ */
+export function computeCoverage(questions: Question[]): Coverage {
+  const live = questions.filter((q) => q.status !== "deleted");
+  const total = live.length;
+  const addressed = live.filter((q) => ADDRESSED.has(q.status)).length;
+  const open = total - addressed;
+  const map = new Map<string, { total: number; addressed: number }>();
+  for (const q of live) {
+    const d = q.dimension ?? "other";
+    const e = map.get(d) ?? { total: 0, addressed: 0 };
+    e.total += 1;
+    if (ADDRESSED.has(q.status)) e.addressed += 1;
+    map.set(d, e);
+  }
+  const byDimension = [...map.entries()].map(([dimension, v]) => ({ dimension, ...v }));
+  return { total, addressed, open, done: total > 0 && open === 0, byDimension };
+}
+
 let wired = false;
 export function ensureGrillListener() {
   if (wired) return;
