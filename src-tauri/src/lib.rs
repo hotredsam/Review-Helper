@@ -1,4 +1,9 @@
 use serde::Serialize;
+use std::sync::Mutex;
+use tauri::Manager;
+
+mod db;
+mod projects;
 
 /// App identity returned to the frontend over the Tauri bridge.
 #[derive(Serialize)]
@@ -21,7 +26,21 @@ fn app_info() -> AppInfo {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![app_info])
+        .setup(|app| {
+            // Open + migrate the SQLite database, then hand the connection to
+            // Tauri's managed state so every command can reach it.
+            let conn = db::connect_app_db(app.handle())?;
+            app.manage(db::Db(Mutex::new(conn)));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            app_info,
+            projects::create_project,
+            projects::list_projects,
+            projects::get_project,
+            projects::rename_project,
+            projects::delete_project,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
