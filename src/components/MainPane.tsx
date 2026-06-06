@@ -9,6 +9,7 @@ import { GrillPane } from "./GrillPane";
 import { ChatPane } from "./ChatPane";
 import { DecisionsPane } from "./DecisionsPane";
 import { StackPane } from "./StackPane";
+import { InboxPane } from "./InboxPane";
 import { sectionById } from "../nav/sections";
 import { useUiStore } from "../store/uiStore";
 import { useProjectStore } from "../store/projectStore";
@@ -73,6 +74,8 @@ export function MainPane({ onNewProject }: Props) {
           <DecisionsPane project={active} />
         ) : section.id === "stack" && active ? (
           <StackPane project={active} />
+        ) : section.id === "inbox" && active ? (
+          <InboxPane project={active} />
         ) : section.id === "plan" && active ? (
           <PlanPane project={active} />
         ) : (

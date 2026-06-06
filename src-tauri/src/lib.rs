@@ -7,6 +7,7 @@ mod cards;
 mod chat;
 pub mod context;
 mod decisions;
+mod features;
 mod db;
 mod github;
 mod grill;
@@ -88,6 +89,11 @@ pub fn run() {
             suggestions::commands::suggestions_approve_all,
             decisions::commands::decisions_list,
             decisions::commands::decision_supersede,
+            features::commands::features_list,
+            features::commands::feature_add,
+            features::commands::feature_set_status,
+            features::commands::features_pending_count,
+            features::commands::transcribe_audio_stub,
             stack::commands::stack_catalog,
             stack::commands::stack_premade,
             stack::commands::stack_list,
