@@ -122,18 +122,42 @@ pub fn list_repos_with(token: &str) -> Result<Vec<RepoSummary>, String> {
     Ok(repos)
 }
 
+/// Fetch one repo's metadata (validates existence/access; used by link-by-URL).
+pub fn get_repo(owner: &str, repo: &str) -> Result<RepoSummary, String> {
+    let resp = http_client()?
+        .get(format!("{API}/repos/{owner}/{repo}"))
+        .bearer_auth(token()?)
+        .header("Accept", ACCEPT)
+        .header("X-GitHub-Api-Version", API_VERSION)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if resp.status().as_u16() == 404 {
+        return Err(format!(
+            "Repository {owner}/{repo} not found, or you don't have access."
+        ));
+    }
+    if !resp.status().is_success() {
+        return Err(status_error(resp.status()));
+    }
+    let repo: RepoJson = resp.json().map_err(|e| e.to_string())?;
+    Ok(repo.into())
+}
+
 /// Create a new repo for the authenticated user (auto-initialized so it has a
-/// first commit and can be cloned). Wired into the "create from app" path in T2.
-#[allow(dead_code)]
+/// first commit and can be cloned).
 pub fn create_repo(name: &str, private: bool) -> Result<RepoSummary, String> {
+    create_repo_with(&token()?, name, private)
+}
+
+/// Create a repo with an explicit token (lets tests/verification avoid the keychain).
+pub fn create_repo_with(token: &str, name: &str, private: bool) -> Result<RepoSummary, String> {
     let name = name.trim();
     if name.is_empty() {
         return Err("Repository name cannot be empty.".into());
     }
-    let token = token()?;
     let resp = http_client()?
         .post(format!("{API}/user/repos"))
-        .bearer_auth(&token)
+        .bearer_auth(token)
         .header("Accept", ACCEPT)
         .header("X-GitHub-Api-Version", API_VERSION)
         .json(&serde_json::json!({ "name": name, "private": private, "auto_init": true }))
@@ -179,6 +203,19 @@ mod tests {
         assert!(
             repos.iter().any(|r| r.full_name.ends_with("/Review-Helper")),
             "Review-Helper not in the repo list"
+        );
+    }
+
+    #[test]
+    #[ignore = "creates a REAL private repo on GitHub (user-authorized throwaway); run: cargo test -- --ignored"]
+    fn real_create_private_repo() {
+        let token = gh_token().expect("gh auth token");
+        let repo = create_repo_with(&token, "rh-phase3-smoketest", true).unwrap();
+        assert!(repo.clone_url.contains("rh-phase3-smoketest"));
+        assert!(!repo.default_branch.is_empty(), "a fresh auto-init repo has a default branch");
+        eprintln!(
+            "CREATED {} (private, branch {}) -> {}",
+            repo.full_name, repo.default_branch, repo.clone_url
         );
     }
 }

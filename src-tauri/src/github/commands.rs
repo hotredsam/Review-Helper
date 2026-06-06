@@ -6,6 +6,7 @@ use tauri::State;
 
 use crate::db::Db;
 use crate::github::{api, device, keychain};
+use crate::projects::{self, Project};
 use crate::settings;
 
 #[derive(Debug, Serialize)]
@@ -124,4 +125,101 @@ pub fn github_device_poll(db: State<Db>, device_code: String) -> Result<DevicePo
         device::PollOutcome::Expired => DevicePollResult::Expired,
         device::PollOutcome::Error(detail) => DevicePollResult::Error { detail },
     })
+}
+
+// ---- Add-project paths (import / link / create-from-app) ----
+
+/// Parse a GitHub repo reference: `owner/repo`, an https URL, or an ssh URL.
+fn parse_repo_ref(input: &str) -> Option<(String, String)> {
+    let s = input.trim().trim_end_matches('/');
+    let s = s.strip_suffix(".git").unwrap_or(s);
+    if let Some(rest) = s.strip_prefix("git@github.com:") {
+        return split_owner_repo(rest);
+    }
+    for prefix in ["https://github.com/", "http://github.com/", "github.com/"] {
+        if let Some(rest) = s.strip_prefix(prefix) {
+            return split_owner_repo(rest);
+        }
+    }
+    if s.matches('/').count() == 1 && !s.contains(char::is_whitespace) {
+        return split_owner_repo(s);
+    }
+    None
+}
+
+fn split_owner_repo(rest: &str) -> Option<(String, String)> {
+    let mut parts = rest.split('/');
+    let owner = parts.next()?.trim();
+    let repo = parts.next()?.trim();
+    if owner.is_empty() || repo.is_empty() {
+        return None;
+    }
+    Some((owner.to_string(), repo.to_string()))
+}
+
+/// Path 1: import a repo picked from the connected user's list.
+#[tauri::command]
+pub fn project_import_repo(
+    db: State<Db>,
+    full_name: String,
+    clone_url: String,
+    default_branch: String,
+) -> Result<Project, String> {
+    let name = full_name.rsplit('/').next().unwrap_or(&full_name).to_string();
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    projects::insert_attached(&conn, &name, "imported", Some(&clone_url), Some(&default_branch))
+}
+
+/// Path 3: link a repo by URL. Validates it exists (and pulls its metadata).
+#[tauri::command]
+pub fn project_link_url(db: State<Db>, url: String) -> Result<Project, String> {
+    let (owner, repo) = parse_repo_ref(&url)
+        .ok_or("That doesn't look like a GitHub repo (expected github.com/owner/repo).")?;
+    let summary = api::get_repo(&owner, &repo)?;
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    projects::insert_attached(
+        &conn,
+        &summary.name,
+        "imported",
+        Some(&summary.clone_url),
+        Some(&summary.default_branch),
+    )
+}
+
+/// Path 4: create a brand-new repo on GitHub and attach it.
+#[tauri::command]
+pub fn project_create_repo(db: State<Db>, name: String, private: bool) -> Result<Project, String> {
+    let summary = api::create_repo(&name, private)?;
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    projects::insert_attached(
+        &conn,
+        &summary.name,
+        "new",
+        Some(&summary.clone_url),
+        Some(&summary.default_branch),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_repo_ref;
+
+    #[test]
+    fn parses_repo_refs_in_several_forms() {
+        let expected = Some(("hotredsam".to_string(), "Review-Helper".to_string()));
+        assert_eq!(parse_repo_ref("hotredsam/Review-Helper"), expected);
+        assert_eq!(parse_repo_ref("https://github.com/hotredsam/Review-Helper"), expected);
+        assert_eq!(parse_repo_ref("https://github.com/hotredsam/Review-Helper.git"), expected);
+        assert_eq!(parse_repo_ref("https://github.com/hotredsam/Review-Helper/"), expected);
+        assert_eq!(parse_repo_ref("git@github.com:hotredsam/Review-Helper.git"), expected);
+        assert_eq!(parse_repo_ref("github.com/hotredsam/Review-Helper"), expected);
+    }
+
+    #[test]
+    fn rejects_bad_refs() {
+        assert_eq!(parse_repo_ref("not a url"), None);
+        assert_eq!(parse_repo_ref("https://gitlab.com/a/b"), None);
+        assert_eq!(parse_repo_ref("just-a-name"), None);
+        assert_eq!(parse_repo_ref("a/b/c"), None);
+    }
 }

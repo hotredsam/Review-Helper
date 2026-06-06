@@ -63,6 +63,33 @@ pub fn insert(
     get(conn, id)?.ok_or_else(|| "Failed to load project after insert.".into())
 }
 
+/// Insert a project attached to a GitHub repo (the import / link / create-from-app
+/// paths). `default_branch` falls back to `main`.
+pub fn insert_attached(
+    conn: &Connection,
+    name: &str,
+    kind: &str,
+    github_repo_url: Option<&str>,
+    default_branch: Option<&str>,
+) -> Result<Project, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Project name cannot be empty.".into());
+    }
+    if !VALID_KINDS.contains(&kind) {
+        return Err(format!(
+            "Invalid project kind '{kind}'. Expected 'imported' or 'new'."
+        ));
+    }
+    conn.execute(
+        "INSERT INTO projects (name, kind, github_repo_url, default_branch) VALUES (?1, ?2, ?3, ?4)",
+        params![name, kind, github_repo_url, default_branch.unwrap_or("main")],
+    )
+    .map_err(|e| e.to_string())?;
+    let id = conn.last_insert_rowid();
+    get(conn, id)?.ok_or_else(|| "Failed to load project after insert.".into())
+}
+
 pub fn list(conn: &Connection) -> Result<Vec<Project>, String> {
     let sql = format!("SELECT {COLUMNS} FROM projects ORDER BY created_at ASC, id ASC");
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
@@ -198,6 +225,26 @@ mod tests {
         assert!(insert(&conn, "   ", "new", None).is_err()); // empty name
         assert!(insert(&conn, "Ok", "bogus", None).is_err()); // invalid kind
         assert!(list(&conn).unwrap().is_empty());
+    }
+
+    #[test]
+    fn insert_attached_sets_github_fields() {
+        let conn = memory_db();
+        let p = insert_attached(
+            &conn,
+            "Repo",
+            "imported",
+            Some("https://github.com/o/Repo.git"),
+            Some("develop"),
+        )
+        .unwrap();
+        assert_eq!(p.kind, "imported");
+        assert_eq!(p.github_repo_url.as_deref(), Some("https://github.com/o/Repo.git"));
+        assert_eq!(p.default_branch.as_deref(), Some("develop"));
+
+        // default branch falls back to main
+        let q = insert_attached(&conn, "Repo2", "new", Some("u"), None).unwrap();
+        assert_eq!(q.default_branch.as_deref(), Some("main"));
     }
 
     #[test]

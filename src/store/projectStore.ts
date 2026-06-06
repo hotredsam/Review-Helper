@@ -6,7 +6,11 @@ import {
   createProject,
   renameProject,
   deleteProject,
+  importRepo as importRepoApi,
+  linkRepoByUrl,
+  createRepoProject,
 } from "../api/projects";
+import type { RepoSummary } from "../api/github";
 
 type Status = "idle" | "loading" | "ready" | "error";
 
@@ -17,6 +21,9 @@ interface ProjectState {
   error: string | null;
   load: () => Promise<void>;
   create: (name: string, kind: Project["kind"], appType?: string) => Promise<Project>;
+  importRepo: (repo: RepoSummary) => Promise<Project>;
+  linkUrl: (url: string) => Promise<Project>;
+  createRepo: (name: string, isPrivate: boolean) => Promise<Project>;
   select: (id: number) => void;
   rename: (id: number, name: string) => Promise<void>;
   remove: (id: number) => Promise<void>;
@@ -57,6 +64,24 @@ export const useProjectStore = create<ProjectState>()(
           projects: [...s.projects, project],
           activeProjectId: project.id,
         }));
+        return project;
+      },
+
+      importRepo: async (repo) => {
+        const project = await importRepoApi(repo.full_name, repo.clone_url, repo.default_branch);
+        set((s) => ({ projects: [...s.projects, project], activeProjectId: project.id }));
+        return project;
+      },
+
+      linkUrl: async (url) => {
+        const project = await linkRepoByUrl(url);
+        set((s) => ({ projects: [...s.projects, project], activeProjectId: project.id }));
+        return project;
+      },
+
+      createRepo: async (name, isPrivate) => {
+        const project = await createRepoProject(name, isPrivate);
+        set((s) => ({ projects: [...s.projects, project], activeProjectId: project.id }));
         return project;
       },
 

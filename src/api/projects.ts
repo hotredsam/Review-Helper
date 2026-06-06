@@ -45,3 +45,21 @@ export function renameProject(id: number, name: string): Promise<Project> {
 export function deleteProject(id: number): Promise<boolean> {
   return invoke<boolean>("delete_project", { id });
 }
+
+// ---- GitHub-attached add-project paths ----
+
+export function importRepo(
+  fullName: string,
+  cloneUrl: string,
+  defaultBranch: string,
+): Promise<Project> {
+  return invoke<Project>("project_import_repo", { fullName, cloneUrl, defaultBranch });
+}
+
+export function linkRepoByUrl(url: string): Promise<Project> {
+  return invoke<Project>("project_link_url", { url });
+}
+
+export function createRepoProject(name: string, isPrivate: boolean): Promise<Project> {
+  return invoke<Project>("project_create_repo", { name, private: isPrivate });
+}
