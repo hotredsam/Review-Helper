@@ -10,12 +10,13 @@ export interface Message {
 
 type Status = "idle" | "streaming" | "error";
 
+// Chat history is intentionally ephemeral (kept in memory): multi-turn resume
+// relies on the model's session_id, not a persisted transcript.
 interface ChatStore {
   messages: Record<number, Message[]>;
   session: Record<number, string | null>;
   status: Record<number, Status>;
   error: Record<number, string | null>;
-  lastSuggestions: Record<number, number>;
   pending: Record<number, Suggestion[]>;
   send: (id: number, message: string) => Promise<void>;
   loadPending: (id: number) => Promise<void>;
@@ -26,7 +27,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   session: {},
   status: {},
   error: {},
-  lastSuggestions: {},
   pending: {},
 
   loadPending: async (id) => {
@@ -88,7 +88,6 @@ function handle(e: ChatEvent) {
       useChatStore.setState((s) => ({
         session: { ...s.session, [id]: e.session_id },
         status: { ...s.status, [id]: "idle" },
-        lastSuggestions: { ...s.lastSuggestions, [id]: e.suggestions },
       }));
       if (e.suggestions > 0) void useChatStore.getState().loadPending(id);
       break;
@@ -106,7 +105,8 @@ let wired = false;
 export function ensureChatListener() {
   if (wired) return;
   wired = true;
-  onChatEvent(handle).catch(() => {
+  onChatEvent(handle).catch((e) => {
     wired = false;
+    console.error("chat: failed to attach event listener", e);
   });
 }

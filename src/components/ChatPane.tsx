@@ -83,15 +83,19 @@ export function ChatPane({ project }: { project: Project }) {
       </div>
 
       {pending.length > 0 && (
-        <div className="mb-2 rounded-lg border border-border bg-surface p-3">
+        <div
+          role="region"
+          aria-label="Pending suggestions"
+          className="mb-2 rounded-lg border border-border bg-surface p-3"
+        >
           <div className="mb-1.5 flex items-center gap-1.5">
             <Lightbulb className="h-4 w-4 text-accent" />
             <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
               Pending suggestions
             </h3>
-            <span className="text-xs text-fg-subtle">— approve in Decisions</span>
+            <span className="text-xs text-fg-subtle">— you'll approve these soon</span>
           </div>
-          <ul className="flex flex-wrap gap-1.5">
+          <ul className="flex flex-wrap gap-1.5" aria-label="Pending suggestion list">
             {pending.map((s) => (
               <li
                 key={s.id}
@@ -148,7 +152,11 @@ function Bubble({ message }: { message: Message }) {
       >
         {message.text}
         {message.streaming && message.text === "" && (
-          <Loader2 className="h-4 w-4 animate-spin text-fg-subtle" />
+          <Loader2
+            className="h-4 w-4 animate-spin text-fg-subtle"
+            role="status"
+            aria-label="Waiting for response"
+          />
         )}
       </div>
     </div>

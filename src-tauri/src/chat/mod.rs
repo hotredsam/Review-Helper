@@ -107,6 +107,22 @@ mod tests {
     }
 
     #[test]
+    fn blocks_only_yields_empty_reply_with_suggestions() {
+        // run_chat substitutes a placeholder message when the prose is empty.
+        let text = "<<<RH:SUGGESTION kind=feature>>>\n{\"title\":\"Export\"}\n<<<RH:END>>>";
+        let (visible, parsed) = parse_suggestions(text);
+        assert!(visible.is_empty());
+        assert_eq!(parsed.len(), 1);
+    }
+
+    #[test]
+    fn empty_and_whitespace_input_is_safe() {
+        assert_eq!(parse_suggestions(""), (String::new(), vec![]));
+        let (v, p) = parse_suggestions("   \n  ");
+        assert!(v.is_empty() && p.is_empty());
+    }
+
+    #[test]
     fn malformed_or_unknown_blocks_are_skipped_not_invented() {
         // unknown kind, invalid-JSON body, and an unterminated block: all dropped.
         let text = "Reply.\n\

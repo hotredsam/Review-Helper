@@ -40,7 +40,7 @@ pub fn chat_send(
     if message.is_empty() {
         return Err("Type a message first.".into());
     }
-    if message.len() > 20_000 {
+    if message.chars().count() > 20_000 {
         return Err("Message is too long (max 20000 characters).".into());
     }
     // Validate the project + capture routing, grounding, and clone path up front.
@@ -74,6 +74,7 @@ fn run_chat(
     };
     emit(ChatEvent::Started { project_id });
 
+    let prior_session = session_id.clone();
     let mut req = ModelRequest::planning(message);
     req.system_append = Some(format!("{CHAT_SYSTEM}\n\n{context}"));
     req.session_id = session_id; // resume the prior turn's session, if any
@@ -82,14 +83,17 @@ fn run_chat(
     }
 
     let mut final_text: Option<String> = None;
-    let mut new_session: Option<String> = None;
+    // Default to the prior session so a None on completion doesn't break resume.
+    let mut new_session: Option<String> = prior_session.clone();
     let mut failure: Option<String> = None;
     provider_for(&config).run(&req, &mut |event: ModelEvent| match event {
         ModelEvent::AssistantText { text } => emit(ChatEvent::Token { project_id, text }),
         ModelEvent::ToolUse { name } => emit(ChatEvent::Tool { project_id, name }),
         ModelEvent::Completed { text, session_id } => {
             final_text = Some(text);
-            new_session = session_id;
+            if session_id.is_some() {
+                new_session = session_id;
+            }
         }
         ModelEvent::Unavailable { detail, .. } | ModelEvent::Failed { detail } => {
             failure = Some(detail)
@@ -112,16 +116,29 @@ fn run_chat(
 
     // Split inferred updates out of the prose, persist them as PENDING
     // suggestions (the user approves later), and show the clean reply.
-    let (reply, parsed) = super::parse_suggestions(&text);
+    let (mut reply, parsed) = super::parse_suggestions(&text);
+    if reply.is_empty() && !parsed.is_empty() {
+        reply = "Recorded the suggestions below.".to_string();
+    }
     let saved = if parsed.is_empty() {
         0
     } else {
         let db = app.state::<Db>();
-        let n = match db.0.lock() {
-            Ok(mut conn) => crate::suggestions::save(&mut conn, project_id, &parsed).unwrap_or(0),
-            Err(_) => 0,
+        let result = match db.0.lock() {
+            Ok(mut conn) => crate::suggestions::save(&mut conn, project_id, &parsed),
+            Err(e) => Err(e.to_string()),
         };
-        n // bind so the lock guard drops before `db`
+        match result {
+            Ok(n) => n,
+            // Surface a save failure instead of silently swallowing it (mirrors grill).
+            Err(detail) => {
+                eprintln!("chat: failed to save suggestions: {detail}");
+                return emit(ChatEvent::Failed {
+                    project_id,
+                    detail: format!("Could not save suggestions: {detail}"),
+                });
+            }
+        }
     };
     emit(ChatEvent::Done {
         project_id,

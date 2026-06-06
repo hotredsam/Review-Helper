@@ -18,7 +18,7 @@ import { chatSend } from "../api/chat";
 import { suggestionsList } from "../api/suggestions";
 
 beforeEach(() => {
-  useChatStore.setState({ messages: {}, session: {}, status: {}, error: {}, lastSuggestions: {}, pending: {} });
+  useChatStore.setState({ messages: {}, session: {}, status: {}, error: {}, pending: {} });
   ctrl.pending = [];
   vi.clearAllMocks();
 });

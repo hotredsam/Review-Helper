@@ -17,17 +17,43 @@ pub struct ParsedSuggestion {
 
 const VALID_KINDS: [&str; 4] = ["decision", "answer", "feature", "stack"];
 
+/// Max stored payload size (bytes). Bounds DB growth on untrusted model output;
+/// real payloads are a few hundred bytes.
+const MAX_PAYLOAD: usize = 10_000;
+
 pub fn is_valid_kind(kind: &str) -> bool {
     VALID_KINDS.contains(&kind)
 }
 
-/// Persist parsed suggestions as pending, atomically. Skips invalid kinds
-/// defensively (the parser already filters). Returns the count added.
+/// Whether a payload has the non-empty string fields its kind requires. Keeps
+/// half-formed suggestions out of the record so Phase 9 approval can trust them.
+fn valid_payload(kind: &str, payload: &str) -> bool {
+    let v: Value = match serde_json::from_str(payload) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let obj = match v.as_object() {
+        Some(o) => o,
+        None => return false,
+    };
+    let has = |k: &str| obj.get(k).and_then(Value::as_str).map(|s| !s.trim().is_empty()).unwrap_or(false);
+    match kind {
+        "decision" => has("topic") && has("choice"),
+        "feature" => has("title"),
+        "stack" => has("pane") && has("choice"),
+        "answer" => has("question") && has("answer"),
+        _ => false,
+    }
+}
+
+/// Persist parsed suggestions as pending, atomically. Skips invalid kinds,
+/// oversized payloads, and payloads missing required fields. Returns the count
+/// added (only well-formed rows).
 pub fn save(conn: &mut Connection, project_id: i64, items: &[ParsedSuggestion]) -> Result<usize, String> {
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let mut added = 0;
     for it in items {
-        if !is_valid_kind(&it.kind) {
+        if !is_valid_kind(&it.kind) || it.payload.len() > MAX_PAYLOAD || !valid_payload(&it.kind, &it.payload) {
             continue;
         }
         tx.execute(
@@ -51,7 +77,13 @@ pub struct Suggestion {
 }
 
 fn payload_value(s: Option<String>) -> Value {
-    s.and_then(|x| serde_json::from_str(&x).ok()).unwrap_or(Value::Null)
+    match s {
+        Some(x) => serde_json::from_str(&x).unwrap_or_else(|e| {
+            eprintln!("suggestions: stored payload is not valid JSON: {e}");
+            Value::Null
+        }),
+        None => Value::Null,
+    }
 }
 
 /// List a project's suggestions, optionally filtered by status, newest first.
@@ -120,5 +152,24 @@ mod tests {
         assert_eq!(pending[0].kind, "feature");
         assert_eq!(pending[1].payload["choice"], "SQLite");
         assert_eq!(pending[0].status, "pending");
+    }
+
+    #[test]
+    fn skips_payloads_missing_required_fields_or_oversized() {
+        let mut conn = db();
+        let pid = project(&conn);
+        let oversized = format!(r#"{{"topic":"{}","choice":"x"}}"#, "y".repeat(MAX_PAYLOAD));
+        let items = vec![
+            ParsedSuggestion { kind: "decision".into(), payload: r#"{"choice":"only"}"#.into() }, // no topic
+            ParsedSuggestion { kind: "feature".into(), payload: r#"{"detail":"no title"}"#.into() }, // no title
+            ParsedSuggestion { kind: "stack".into(), payload: r#"{"pane":"frontend"}"#.into() }, // no choice
+            ParsedSuggestion { kind: "decision".into(), payload: "{}".into() }, // empty object
+            ParsedSuggestion { kind: "decision".into(), payload: oversized }, // too big
+            ParsedSuggestion { kind: "feature".into(), payload: r#"{"title":"Good one"}"#.into() }, // valid
+        ];
+        let added = save(&mut conn, pid, &items).unwrap();
+        assert_eq!(added, 1, "only the complete, bounded payload persists");
+        let pending = list(&conn, pid, Some("pending")).unwrap();
+        assert_eq!(pending[0].payload["title"], "Good one");
     }
 }
