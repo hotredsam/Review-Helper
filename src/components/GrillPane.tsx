@@ -1,9 +1,24 @@
 import { useEffect, type ReactNode } from "react";
 import { Loader2, MessageSquareQuote, AlertTriangle, Sparkles } from "lucide-react";
 import { useGrillStore, ensureGrillListener } from "../store/grillStore";
+import { QuestionCard } from "./QuestionCard";
 import type { Project } from "../api/projects";
 
 const DEFAULT_DEPTH = 3;
+const ACTIVE_AT_ONCE = 5;
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case "answered":
+      return "Answered";
+    case "not_relevant":
+      return "Not relevant";
+    case "unknown":
+      return "Don't know";
+    default:
+      return status;
+  }
+}
 
 /**
  * The Grill pane: generates repo-specific questions (each with a recommended
@@ -74,11 +89,15 @@ export function GrillPane({ project }: { project: Project }) {
     );
   }
 
+  const open = questions.filter((q) => q.status === "open");
+  const active = open.slice(0, ACTIVE_AT_ONCE);
+  const addressed = questions.filter((q) => q.status !== "open");
+
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-8">
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-          {questions.length} question{questions.length === 1 ? "" : "s"}
+          {open.length} open · {addressed.length} addressed
         </h2>
         <button
           type="button"
@@ -89,26 +108,33 @@ export function GrillPane({ project }: { project: Project }) {
         </button>
       </div>
 
-      <ul className="space-y-3">
-        {questions.map((q) => (
-          <li key={q.id} className="rounded-lg border border-border bg-surface p-4">
-            <div className="mb-1 flex items-center gap-2">
-              {q.dimension && (
-                <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs capitalize text-fg-subtle">
-                  {q.dimension}
+      {active.length > 0 ? (
+        <ul className="space-y-3">
+          {active.map((q) => (
+            <QuestionCard key={q.id} projectId={id} question={q} />
+          ))}
+        </ul>
+      ) : (
+        <p className="rounded-lg border border-border bg-surface p-4 text-sm text-fg-muted">
+          All questions addressed. Use “Ask more” to go deeper.
+        </p>
+      )}
+
+      {addressed.length > 0 && (
+        <div className="space-y-1">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Addressed</h3>
+          <ul className="space-y-1">
+            {addressed.map((q) => (
+              <li key={q.id} className="flex items-center gap-2 text-sm text-fg-subtle">
+                <span className="shrink-0 rounded bg-surface-2 px-1.5 py-0.5 text-xs">
+                  {statusLabel(q.status)}
                 </span>
-              )}
-              {q.bank_topic && <span className="text-xs text-fg-subtle">{q.bank_topic}</span>}
-            </div>
-            <p className="text-sm font-medium text-fg">{q.text}</p>
-            {q.recommended_answer && (
-              <p className="mt-1.5 text-sm text-fg-muted">
-                <span className="font-medium text-fg-subtle">Recommended:</span> {q.recommended_answer}
-              </p>
-            )}
-          </li>
-        ))}
-      </ul>
+                <span className="truncate">{q.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

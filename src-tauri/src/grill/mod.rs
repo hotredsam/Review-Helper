@@ -2,7 +2,7 @@
 //! tagged by dimension. The bank (bank.json) supplies topics; the model writes
 //! the question text + recommended answer grounded in the actual repo + plan.
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 
 pub mod commands;
@@ -65,6 +65,68 @@ pub fn list_questions(conn: &Connection, project_id: i64) -> Result<Vec<Question
     .map_err(|e| e.to_string())
 }
 
+/// Record an answer for a question and mark it answered. `source` is one of
+/// typed/audio/chat (schema CHECK). Used by Submit (typed) and the chat
+/// resolution path (chat) — a "Let's chat" outcome writes back into the card.
+pub fn answer_question(
+    conn: &Connection,
+    project_id: i64,
+    question_id: i64,
+    body: &str,
+    source: &str,
+) -> Result<(), String> {
+    let body = body.trim();
+    if body.is_empty() {
+        return Err("Write an answer first.".into());
+    }
+    if body.len() > 10_000 {
+        return Err("Answer is too long (max 10000 characters).".into());
+    }
+    let exists = conn
+        .query_row(
+            "SELECT 1 FROM questions WHERE id = ?1 AND project_id = ?2 AND status != 'deleted'",
+            params![question_id, project_id],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .is_some();
+    if !exists {
+        return Err("Question not found.".into());
+    }
+    // Record the answer durably first, then flip the question's status.
+    conn.execute(
+        "INSERT INTO answers (question_id, project_id, body, source) VALUES (?1, ?2, ?3, ?4)",
+        params![question_id, project_id, body, source],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE questions SET status = 'answered' WHERE id = ?1 AND project_id = ?2",
+        params![question_id, project_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Set a question's status (dismiss as not_relevant/unknown, soft-delete, or
+/// reopen). Answered status is set via `answer_question`, not here.
+pub fn set_status(conn: &Connection, project_id: i64, question_id: i64, status: &str) -> Result<(), String> {
+    const ALLOWED: [&str; 4] = ["open", "not_relevant", "unknown", "deleted"];
+    if !ALLOWED.contains(&status) {
+        return Err("Invalid question status.".into());
+    }
+    let affected = conn
+        .execute(
+            "UPDATE questions SET status = ?1 WHERE id = ?2 AND project_id = ?3",
+            params![status, question_id, project_id],
+        )
+        .map_err(|e| e.to_string())?;
+    if affected == 0 {
+        return Err("Question not found.".into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,5 +173,62 @@ mod tests {
         assert_eq!(qs[0].bank_topic.as_deref(), Some("Core problem"));
         assert_eq!(qs[0].recommended_answer.as_deref(), Some("Tracks brisket cooks."));
         assert_eq!(qs[0].status, "open");
+    }
+
+    #[test]
+    fn answering_records_an_answer_and_marks_answered() {
+        let conn = db();
+        let pid = project(&conn);
+        save_questions(&conn, pid, &[gen("vision", "Core problem", "Q?", "rec")]).unwrap();
+        let qid = list_questions(&conn, pid).unwrap()[0].id;
+
+        // Empty answer rejected.
+        assert!(answer_question(&conn, pid, qid, "   ", "typed").is_err());
+
+        answer_question(&conn, pid, qid, "Solo pitmasters tracking cooks.", "typed").unwrap();
+        assert_eq!(list_questions(&conn, pid).unwrap()[0].status, "answered");
+        let body: String = conn
+            .query_row("SELECT body FROM answers WHERE question_id = ?1", [qid], |r| r.get(0))
+            .unwrap();
+        assert_eq!(body, "Solo pitmasters tracking cooks.");
+    }
+
+    #[test]
+    fn lets_chat_resolution_writes_back_into_the_card() {
+        let conn = db();
+        let pid = project(&conn);
+        save_questions(&conn, pid, &[gen("scope", "MVP boundary", "Q?", "rec")]).unwrap();
+        let qid = list_questions(&conn, pid).unwrap()[0].id;
+
+        // The chat resolution path stores a chat-sourced answer + marks answered.
+        answer_question(&conn, pid, qid, "We settled on a read-only v1.", "chat").unwrap();
+        assert_eq!(list_questions(&conn, pid).unwrap()[0].status, "answered");
+        let src: String = conn
+            .query_row("SELECT source FROM answers WHERE question_id = ?1", [qid], |r| r.get(0))
+            .unwrap();
+        assert_eq!(src, "chat");
+    }
+
+    #[test]
+    fn dismiss_and_delete_behave() {
+        let conn = db();
+        let pid = project(&conn);
+        save_questions(
+            &conn,
+            pid,
+            &[gen("ux", "First run", "a", "r"), gen("ux", "Error states", "b", "r")],
+        )
+        .unwrap();
+        let ids: Vec<i64> = list_questions(&conn, pid).unwrap().iter().map(|q| q.id).collect();
+
+        set_status(&conn, pid, ids[0], "not_relevant").unwrap();
+        assert_eq!(list_questions(&conn, pid).unwrap()[0].status, "not_relevant");
+
+        set_status(&conn, pid, ids[1], "deleted").unwrap();
+        let after = list_questions(&conn, pid).unwrap();
+        assert_eq!(after.len(), 1, "deleted questions drop out of the list");
+
+        assert!(set_status(&conn, pid, ids[0], "bogus").is_err(), "invalid status rejected");
+        assert!(set_status(&conn, pid, 9999, "open").is_err(), "missing question rejected");
     }
 }

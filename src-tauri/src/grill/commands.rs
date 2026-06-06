@@ -121,6 +121,50 @@ pub fn grill_list(db: State<'_, Db>, project_id: i64) -> Result<Vec<Question>, S
     list_questions(&conn, project_id)
 }
 
+/// Submit a typed answer; marks the question answered.
+#[tauri::command]
+pub fn grill_answer(
+    db: State<'_, Db>,
+    project_id: i64,
+    question_id: i64,
+    body: String,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    super::answer_question(&conn, project_id, question_id, &body, "typed")
+}
+
+/// Write a chat resolution back into the card (the "Let's chat about this"
+/// outcome); marks the question answered with a chat-sourced answer.
+#[tauri::command]
+pub fn grill_chat_resolve(
+    db: State<'_, Db>,
+    project_id: i64,
+    question_id: i64,
+    resolution: String,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    super::answer_question(&conn, project_id, question_id, &resolution, "chat")
+}
+
+/// Dismiss a question as not relevant / unknown (both count as addressed).
+#[tauri::command]
+pub fn grill_set_status(
+    db: State<'_, Db>,
+    project_id: i64,
+    question_id: i64,
+    status: String,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    super::set_status(&conn, project_id, question_id, &status)
+}
+
+/// Soft-delete a question (drops out of the list, frees its bank topic).
+#[tauri::command]
+pub fn grill_delete(db: State<'_, Db>, project_id: i64, question_id: i64) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    super::set_status(&conn, project_id, question_id, "deleted")
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::generate::bank;

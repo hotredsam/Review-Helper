@@ -1,5 +1,15 @@
 import { create } from "zustand";
-import { grillGenerate, grillList, onGrillEvent, type Question, type GrillEvent } from "../api/grill";
+import {
+  grillGenerate,
+  grillList,
+  grillAnswer,
+  grillChatResolve,
+  grillSetStatus,
+  grillDelete,
+  onGrillEvent,
+  type Question,
+  type GrillEvent,
+} from "../api/grill";
 
 type Status = "idle" | "running" | "error";
 
@@ -12,6 +22,12 @@ interface GrillStore {
   load: (id: number) => Promise<void>;
   generate: (id: number, depth: number) => Promise<void>;
   setDepth: (id: number, depth: number) => void;
+  // Per-card actions: mutate then reload so the card moves to addressed. They
+  // throw on failure so the card can show a local error (no pane-wide error).
+  answer: (id: number, questionId: number, body: string) => Promise<void>;
+  chatResolve: (id: number, questionId: number, resolution: string) => Promise<void>;
+  setStatus: (id: number, questionId: number, status: string) => Promise<void>;
+  remove: (id: number, questionId: number) => Promise<void>;
 }
 
 export const useGrillStore = create<GrillStore>((set, get) => ({
@@ -46,6 +62,23 @@ export const useGrillStore = create<GrillStore>((set, get) => ({
   },
 
   setDepth: (id, depth) => set((s) => ({ depth: { ...s.depth, [id]: depth } })),
+
+  answer: async (id, questionId, body) => {
+    await grillAnswer(id, questionId, body);
+    await get().load(id);
+  },
+  chatResolve: async (id, questionId, resolution) => {
+    await grillChatResolve(id, questionId, resolution);
+    await get().load(id);
+  },
+  setStatus: async (id, questionId, status) => {
+    await grillSetStatus(id, questionId, status);
+    await get().load(id);
+  },
+  remove: async (id, questionId) => {
+    await grillDelete(id, questionId);
+    await get().load(id);
+  },
 }));
 
 function handle(e: GrillEvent) {

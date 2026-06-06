@@ -25,6 +25,23 @@ export function grillList(id: number): Promise<Question[]> {
   return invoke<Question[]>("grill_list", { projectId: id });
 }
 
+export function grillAnswer(id: number, questionId: number, body: string): Promise<void> {
+  return invoke("grill_answer", { projectId: id, questionId, body });
+}
+
+/** Write a "Let's chat about this" resolution back into the card. */
+export function grillChatResolve(id: number, questionId: number, resolution: string): Promise<void> {
+  return invoke("grill_chat_resolve", { projectId: id, questionId, resolution });
+}
+
+export function grillSetStatus(id: number, questionId: number, status: string): Promise<void> {
+  return invoke("grill_set_status", { projectId: id, questionId, status });
+}
+
+export function grillDelete(id: number, questionId: number): Promise<void> {
+  return invoke("grill_delete", { projectId: id, questionId });
+}
+
 export function onGrillEvent(cb: (e: GrillEvent) => void): Promise<UnlistenFn> {
   return listen<GrillEvent>("grill-event", (e) => cb(e.payload));
 }
