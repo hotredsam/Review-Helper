@@ -5,6 +5,7 @@ use tauri::Manager;
 mod db;
 pub mod model;
 mod projects;
+mod settings;
 
 /// App identity returned to the frontend over the Tauri bridge.
 #[derive(Serialize)]
@@ -37,6 +38,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info,
             model::commands::model_run,
+            settings::get_model_config,
+            settings::set_model_config,
             projects::create_project,
             projects::list_projects,
             projects::get_project,

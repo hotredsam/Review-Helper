@@ -50,6 +50,10 @@ vi.mock("@tauri-apps/api/core", () => ({
         }
         return false;
       }
+      case "get_model_config":
+        return { provider: "claude", local_endpoint: null, api_credit_overflow: false };
+      case "set_model_config":
+        return undefined;
       case "app_info":
         return { name: "Review Helper", version: "0.1.0" };
       default:

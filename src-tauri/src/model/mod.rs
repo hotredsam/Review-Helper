@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 pub mod claude;
 pub mod commands;
 pub mod fake;
+pub mod local;
 
 /// Read/search tools a planning call may use. Deliberately excludes
 /// Bash/Edit/Write/NotebookEdit — the model never mutates source.

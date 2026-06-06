@@ -55,7 +55,7 @@ export function ModelConsole() {
         )}
         {unavailable && (
           <p className="text-danger" role="alert">
-            Claude not available ({unavailable.reason.replace(/_/g, " ")}): {unavailable.detail}
+            Unavailable ({unavailable.reason.replace(/_/g, " ")}): {unavailable.detail}
           </p>
         )}
         {error && (
