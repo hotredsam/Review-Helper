@@ -4,7 +4,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 
 ## Current state
 
-**Phases 1–11 are done; Phase 12 is current.** The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
+**Phases 1–12 are done; Phase 13 is current.** The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
 
 ## How to execute
 
@@ -45,7 +45,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 | 9 | `phases/phase-09-decisions-stack.md` — decisions, suggestions & stack panes | done |
 | 10 | `phases/phase-10-inbox-regen.md` — feature inbox & plan regeneration | done |
 | 11 | `phases/phase-11-github-sync.md` — GitHub sync out | done |
-| 12 | `phases/phase-12-viz-firstrun.md` — visualization, first-run & polish | not started |
+| 12 | `phases/phase-12-viz-firstrun.md` — visualization, first-run & polish | done |
 | 13 | `phases/phase-13-hardening.md` — production hardening | not started |
 | 14 | `phases/phase-14-coming-soon.md` — coming-soon learning mode (stub) | not started |
 

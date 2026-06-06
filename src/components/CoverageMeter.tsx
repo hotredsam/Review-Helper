@@ -1,4 +1,5 @@
 import { CheckCircle2 } from "lucide-react";
+import { InfoDot } from "./InfoDot";
 import type { Coverage } from "../store/grillStore";
 
 /** Detail Coverage meter: overall progress + per-dimension breakdown, flipping
@@ -10,6 +11,10 @@ export function CoverageMeter({ cov }: { cov: Coverage }) {
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
           Detail coverage
+          <InfoDot
+            term="detail coverage"
+            explanation="How much of the project you've pinned down — answered and dismissed questions both count. It flips to “Done grilling” when none are left open."
+          />
         </h3>
         {cov.done ? (
           <span className="flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">
