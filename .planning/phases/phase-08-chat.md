@@ -1,0 +1,12 @@
+# Phase 8 — Two-way chat & structured proposals
+Status: not started
+Goal: A grounded, two-way chat that turns inferred updates into pending suggestions.
+Depends on: Phase 2, Phase 4
+
+## Tasks
+- [ ] **T1 Chat with context** — chat pane on the Claude adapter, context bundle injected each turn, multi-turn resume. Done when: a multi-turn chat references project state correctly and resumes across turns.
+- [ ] **T2 Structured proposals** — instruct the model to emit inferred updates as tagged blocks; parse into `suggestions`. Done when: a chat implying a decision and a feature produces matching pending suggestions, and a chat with none produces none.
+
+## Watch for (this phase)
+- The parser must be robust to malformed or absent blocks — don't crash, don't invent.
+- Nothing reaches the record from chat except through pending suggestions the user approves.

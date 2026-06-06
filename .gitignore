@@ -1,0 +1,41 @@
+# --- Node / frontend ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# --- Rust / Tauri backend ---
+src-tauri/target/
+target/
+
+# --- Logs & debug ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Editor / OS ---
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# --- Secrets (defense in depth; the gate also blocks these) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials
+
+# --- App-local SQLite (dev databases live in the OS app-data dir, not the repo) ---
+*.sqlite
+*.sqlite3
+*.db
