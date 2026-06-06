@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { CheckCheck, Check, X, Inbox } from "lucide-react";
+import { CheckCheck, Check, X, Inbox, Archive } from "lucide-react";
 import { useDecisionsStore } from "../store/decisionsStore";
 import { summarizeSuggestion } from "../api/suggestions";
+import type { Decision } from "../api/decisions";
 import type { Project } from "../api/projects";
 
 /**
@@ -12,15 +13,20 @@ export function DecisionsPane({ project }: { project: Project }) {
   const id = project.id;
   const pendingRaw = useDecisionsStore((s) => s.pending[id]);
   const pending = pendingRaw ?? [];
+  const decisionsRaw = useDecisionsStore((s) => s.decisions[id]);
+  const decisions = decisionsRaw ?? [];
   const error = useDecisionsStore((s) => s.error[id]);
   const loadPending = useDecisionsStore((s) => s.loadPending);
+  const loadDecisions = useDecisionsStore((s) => s.loadDecisions);
   const approve = useDecisionsStore((s) => s.approve);
   const dismiss = useDecisionsStore((s) => s.dismiss);
   const approveAll = useDecisionsStore((s) => s.approveAll);
+  const supersede = useDecisionsStore((s) => s.supersede);
 
   useEffect(() => {
     void loadPending(id);
-  }, [id, loadPending]);
+    void loadDecisions(id);
+  }, [id, loadPending, loadDecisions]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-8">
@@ -90,6 +96,78 @@ export function DecisionsPane({ project }: { project: Project }) {
           </ul>
         )}
       </section>
+
+      <section className="space-y-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+          Decisions {decisions.length > 0 && `(${decisions.length})`}
+        </h2>
+        {decisions.length === 0 ? (
+          <p className="text-sm text-fg-subtle">
+            No decisions yet. Approving a decision suggestion records it here.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {decisions.map((d) => (
+              <DecisionCard
+                key={d.id}
+                decision={d}
+                onSupersede={() => void supersede(id, d.id)}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
+  );
+}
+
+function DecisionCard({ decision: d, onSupersede }: { decision: Decision; onSupersede: () => void }) {
+  const superseded = d.status === "superseded";
+  return (
+    <li
+      className={
+        "rounded-lg border border-border bg-surface p-4 " + (superseded ? "opacity-60" : "")
+      }
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="flex items-baseline gap-2">
+          <h3 className="font-semibold text-fg">{d.topic}</h3>
+          <span className="text-sm text-fg-muted">{d.choice}</span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span
+            className={
+              "rounded-full px-2 py-0.5 text-xs " +
+              (superseded ? "bg-surface-2 text-fg-subtle" : "bg-success/15 text-success")
+            }
+          >
+            {superseded ? "Superseded" : "Active"}
+          </span>
+          {!superseded && (
+            <button
+              type="button"
+              onClick={onSupersede}
+              aria-label={`Supersede ${d.topic}`}
+              className="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-fg-muted hover:bg-surface-2"
+            >
+              <Archive className="h-3 w-3" /> Supersede
+            </button>
+          )}
+        </div>
+      </div>
+      <Field label="Rationale" body={d.rationale} />
+      <Field label="Alternatives" body={d.alternatives} />
+      <Field label="Consequences" body={d.consequences} />
+      {d.source_ref && <p className="mt-1 text-xs text-fg-subtle">Source: {d.source_ref}</p>}
+    </li>
+  );
+}
+
+function Field({ label, body }: { label: string; body: string | null }) {
+  if (!body || !body.trim()) return null;
+  return (
+    <p className="mt-1 text-sm text-fg-muted">
+      <span className="font-medium text-fg-subtle">{label}:</span> {body}
+    </p>
   );
 }

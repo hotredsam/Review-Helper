@@ -6,6 +6,7 @@ mod assess;
 mod cards;
 mod chat;
 pub mod context;
+mod decisions;
 mod db;
 mod github;
 mod grill;
@@ -84,6 +85,8 @@ pub fn run() {
             suggestions::commands::suggestion_approve,
             suggestions::commands::suggestion_dismiss,
             suggestions::commands::suggestions_approve_all,
+            decisions::commands::decisions_list,
+            decisions::commands::decision_supersede,
             projects::create_project,
             projects::list_projects,
             projects::get_project,
