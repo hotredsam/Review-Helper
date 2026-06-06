@@ -67,6 +67,105 @@ pub fn save(conn: &mut Connection, project_id: i64, items: &[ParsedSuggestion]) 
     Ok(added)
 }
 
+use rusqlite::OptionalExtension;
+
+fn field(p: &Value, k: &str) -> String {
+    p.get(k).and_then(Value::as_str).unwrap_or("").trim().to_string()
+}
+
+/// Approve a pending suggestion: write the record for its kind, then mark it
+/// approved — atomically. Each kind writes ONLY its own table (+ the
+/// suggestion's status); one approval never mutates unrelated rows.
+pub fn approve(conn: &mut Connection, project_id: i64, suggestion_id: i64) -> Result<(), String> {
+    let (kind, payload): (String, String) = conn
+        .query_row(
+            "SELECT kind, payload FROM suggestions WHERE id = ?1 AND project_id = ?2 AND status = 'pending'",
+            params![suggestion_id, project_id],
+            |r| Ok((r.get(0)?, r.get::<_, Option<String>>(1)?.unwrap_or_default())),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .ok_or("Suggestion not found or already handled.")?;
+    let p: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
+
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    match kind.as_str() {
+        "decision" => {
+            tx.execute(
+                "INSERT INTO decisions (project_id, topic, choice, rationale, source_ref, status) \
+                 VALUES (?1, ?2, ?3, ?4, 'chat', 'active')",
+                params![project_id, field(&p, "topic"), field(&p, "choice"), field(&p, "rationale")],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        "feature" => {
+            // features.source is CHECK(text|audio) — a chat-proposed feature is 'text'.
+            tx.execute(
+                "INSERT INTO features (project_id, title, detail, source, status) \
+                 VALUES (?1, ?2, ?3, 'text', 'inbox')",
+                params![project_id, field(&p, "title"), field(&p, "detail")],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        "stack" => {
+            tx.execute(
+                "INSERT INTO stack_selections (project_id, pane, choice, rationale) VALUES (?1, ?2, ?3, ?4) \
+                 ON CONFLICT(project_id, pane) DO UPDATE SET choice = excluded.choice, rationale = excluded.rationale",
+                params![project_id, field(&p, "pane"), field(&p, "choice"), field(&p, "rationale")],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        "answer" => {
+            let body = format!("{}\n{}", field(&p, "question"), field(&p, "answer"));
+            tx.execute(
+                "INSERT INTO answers (project_id, body, source) VALUES (?1, ?2, 'chat')",
+                params![project_id, body.trim()],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        _ => return Err("Unknown suggestion kind.".into()),
+    }
+    tx.execute(
+        "UPDATE suggestions SET status = 'approved' WHERE id = ?1 AND project_id = ?2",
+        params![suggestion_id, project_id],
+    )
+    .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Dismiss a pending suggestion without writing anything to the record.
+pub fn dismiss(conn: &Connection, project_id: i64, suggestion_id: i64) -> Result<(), String> {
+    let n = conn
+        .execute(
+            "UPDATE suggestions SET status = 'dismissed' WHERE id = ?1 AND project_id = ?2 AND status = 'pending'",
+            params![suggestion_id, project_id],
+        )
+        .map_err(|e| e.to_string())?;
+    if n == 0 {
+        return Err("Suggestion not found or already handled.".into());
+    }
+    Ok(())
+}
+
+/// Approve every pending suggestion for a project. Returns the count approved.
+pub fn approve_all(conn: &mut Connection, project_id: i64) -> Result<usize, String> {
+    let ids: Vec<i64> = {
+        let mut stmt = conn
+            .prepare("SELECT id FROM suggestions WHERE project_id = ?1 AND status = 'pending' ORDER BY id")
+            .map_err(|e| e.to_string())?;
+        stmt.query_map([project_id], |r| r.get(0))
+            .and_then(Iterator::collect)
+            .map_err(|e| e.to_string())?
+    };
+    let mut n = 0;
+    for id in ids {
+        approve(conn, project_id, id)?;
+        n += 1;
+    }
+    Ok(n)
+}
+
 #[derive(Debug, Serialize, PartialEq)]
 pub struct Suggestion {
     pub id: i64,
@@ -171,5 +270,47 @@ mod tests {
         assert_eq!(added, 1, "only the complete, bounded payload persists");
         let pending = list(&conn, pid, Some("pending")).unwrap();
         assert_eq!(pending[0].payload["title"], "Good one");
+    }
+
+    fn count(conn: &Connection, sql: &str) -> i64 {
+        conn.query_row(sql, [], |r| r.get(0)).unwrap()
+    }
+
+    #[test]
+    fn approve_writes_the_right_table_dismiss_writes_nothing() {
+        let mut conn = db();
+        let pid = project(&conn);
+        save(
+            &mut conn,
+            pid,
+            &[
+                ParsedSuggestion { kind: "decision".into(), payload: r#"{"topic":"DB","choice":"SQLite","rationale":"local"}"#.into() },
+                ParsedSuggestion { kind: "feature".into(), payload: r#"{"title":"Export CSV","detail":"x"}"#.into() },
+                ParsedSuggestion { kind: "stack".into(), payload: r#"{"pane":"frontend","choice":"React"}"#.into() },
+            ],
+        )
+        .unwrap();
+        let ids: Vec<i64> = list(&conn, pid, Some("pending")).unwrap().iter().map(|s| s.id).collect();
+
+        // Approve the decision -> a decisions row, nothing else.
+        let decision_id = list(&conn, pid, Some("pending")).unwrap().iter().find(|s| s.kind == "decision").unwrap().id;
+        approve(&mut conn, pid, decision_id).unwrap();
+        assert_eq!(count(&conn, "SELECT count(*) FROM decisions"), 1);
+        assert_eq!(count(&conn, "SELECT count(*) FROM features"), 0);
+        assert_eq!(count(&conn, "SELECT count(*) FROM stack_selections"), 0);
+
+        // Dismiss one (a feature) -> writes nothing; it's gone from pending.
+        let feat_id = list(&conn, pid, Some("pending")).unwrap().iter().find(|s| s.kind == "feature").unwrap().id;
+        dismiss(&conn, pid, feat_id).unwrap();
+        assert_eq!(count(&conn, "SELECT count(*) FROM features"), 0, "dismiss writes nothing");
+
+        // Approve-all clears the rest of the queue (the stack one).
+        let n = approve_all(&mut conn, pid).unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(count(&conn, "SELECT count(*) FROM stack_selections"), 1);
+        assert!(list(&conn, pid, Some("pending")).unwrap().is_empty(), "queue cleared");
+
+        // re-approving a handled suggestion errors.
+        assert!(approve(&mut conn, pid, ids[0]).is_err());
     }
 }

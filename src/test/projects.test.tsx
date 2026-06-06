@@ -70,6 +70,8 @@ vi.mock("@tauri-apps/api/core", () => ({
         return undefined;
       case "app_info":
         return { name: "Review Helper", version: "0.1.0" };
+      case "suggestions_list":
+        return [];
       default:
         throw new Error("unknown command: " + cmd);
     }
@@ -137,9 +139,9 @@ describe("App shell", () => {
     expect(screen.queryByText(/Create your first project/i)).toBeNull();
     expect(screen.getAllByText("Alpha").length).toBeGreaterThan(0);
 
-    // Nav switches to another pane's empty state.
+    // Nav switches to the Decisions pane (its pending-approval empty state).
     await user.click(screen.getByRole("button", { name: /Decisions/i }));
-    await screen.findByText(/No decisions recorded/i);
+    await screen.findByText(/No pending suggestions/i);
 
     // Settings is reachable and hosts the (functional) theme switcher.
     await user.click(screen.getByRole("button", { name: /Settings/i }));
