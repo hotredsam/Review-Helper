@@ -4,7 +4,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 
 ## Current state
 
-**Nothing is built yet. Start at Phase 1.** The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
+**Phase 1 (app shell) is done; Phase 2 is current.** The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
 
 ## How to execute
 
@@ -34,7 +34,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 
 | # | File | Status |
 |---|------|--------|
-| 1 | `phases/phase-01-shell.md` — project scaffold & app shell | not started |
+| 1 | `phases/phase-01-shell.md` — project scaffold & app shell | done |
 | 2 | `phases/phase-02-model-provider.md` — model provider & Claude availability | not started |
 | 3 | `phases/phase-03-projects-github.md` — projects & GitHub connect | not started |
 | 4 | `phases/phase-04-analysis-coldstart.md` — repo analysis & cold start | not started |
