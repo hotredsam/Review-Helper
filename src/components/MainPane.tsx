@@ -8,6 +8,7 @@ import { UnderstandHub } from "./UnderstandHub";
 import { GrillPane } from "./GrillPane";
 import { ChatPane } from "./ChatPane";
 import { DecisionsPane } from "./DecisionsPane";
+import { StackPane } from "./StackPane";
 import { sectionById } from "../nav/sections";
 import { useUiStore } from "../store/uiStore";
 import { useProjectStore } from "../store/projectStore";
@@ -70,6 +71,8 @@ export function MainPane({ onNewProject }: Props) {
           <ChatPane project={active} />
         ) : section.id === "decisions" && active ? (
           <DecisionsPane project={active} />
+        ) : section.id === "stack" && active ? (
+          <StackPane project={active} />
         ) : section.id === "plan" && active ? (
           <PlanPane project={active} />
         ) : (

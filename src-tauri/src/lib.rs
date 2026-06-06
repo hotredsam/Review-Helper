@@ -13,6 +13,7 @@ mod grill;
 pub mod model;
 mod plan;
 mod projects;
+mod stack;
 mod suggestions;
 #[cfg(test)]
 mod seed_real;
@@ -87,6 +88,11 @@ pub fn run() {
             suggestions::commands::suggestions_approve_all,
             decisions::commands::decisions_list,
             decisions::commands::decision_supersede,
+            stack::commands::stack_catalog,
+            stack::commands::stack_premade,
+            stack::commands::stack_list,
+            stack::commands::stack_set,
+            stack::commands::stack_apply_premade,
             projects::create_project,
             projects::list_projects,
             projects::get_project,

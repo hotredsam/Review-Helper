@@ -4,7 +4,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 
 ## Current state
 
-**Phases 1–8 are done; Phase 9 is current.** The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
+**Phases 1–9 are done; Phase 10 is current.** The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
 
 ## How to execute
 
@@ -42,7 +42,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 | 6 | `phases/phase-06-understand-hub.md` — the Understand hub | done |
 | 7 | `phases/phase-07-grill.md` — grill-me cards & detail coverage | done |
 | 8 | `phases/phase-08-chat.md` — two-way chat & structured proposals | done |
-| 9 | `phases/phase-09-decisions-stack.md` — decisions, suggestions & stack panes | not started |
+| 9 | `phases/phase-09-decisions-stack.md` — decisions, suggestions & stack panes | done |
 | 10 | `phases/phase-10-inbox-regen.md` — feature inbox & plan regeneration | not started |
 | 11 | `phases/phase-11-github-sync.md` — GitHub sync out | not started |
 | 12 | `phases/phase-12-viz-firstrun.md` — visualization, first-run & polish | not started |

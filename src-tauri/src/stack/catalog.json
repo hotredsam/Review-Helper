@@ -1,0 +1,27 @@
+{
+  "frontend": [
+    { "choice": "React + Vite", "rationale": "Mature ecosystem, fast dev server, the default this app itself uses." },
+    { "choice": "Svelte", "rationale": "Less boilerplate and smaller bundles; smaller ecosystem." },
+    { "choice": "SolidJS", "rationale": "React-like with fine-grained reactivity and no virtual DOM." }
+  ],
+  "backend": [
+    { "choice": "Tauri (Rust)", "rationale": "Native desktop with a Rust core; tiny binaries, strong safety." },
+    { "choice": "Node + Express", "rationale": "Ubiquitous, easy to hire for; weaker typing without extra setup." },
+    { "choice": "Python + FastAPI", "rationale": "Great for data/ML-adjacent work with typed, async endpoints." }
+  ],
+  "database": [
+    { "choice": "SQLite", "rationale": "Zero-ops embedded DB; perfect for local-first and single-node apps." },
+    { "choice": "PostgreSQL", "rationale": "Battle-tested relational DB for multi-user, concurrent workloads." },
+    { "choice": "None", "rationale": "No persistent store — fine for stateless tools or static sites." }
+  ],
+  "deployment": [
+    { "choice": "Direct download", "rationale": "Ship a signed binary/installer; no servers to run." },
+    { "choice": "Docker", "rationale": "Reproducible container you can run anywhere; some ops overhead." },
+    { "choice": "Vercel", "rationale": "Push-to-deploy for web frontends and edge functions." }
+  ],
+  "pipes": [
+    { "choice": "None", "rationale": "No external integrations yet — keep the surface small." },
+    { "choice": "Stripe", "rationale": "Payments and billing without building a PCI surface yourself." },
+    { "choice": "Background jobs", "rationale": "A queue/worker for slow or scheduled work off the request path." }
+  ]
+}

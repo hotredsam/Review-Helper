@@ -1,0 +1,35 @@
+[
+  {
+    "name": "Local-first desktop",
+    "summary": "A native app that runs on the user's machine with no servers.",
+    "panes": {
+      "frontend": "React + Vite",
+      "backend": "Tauri (Rust)",
+      "database": "SQLite",
+      "deployment": "Direct download",
+      "pipes": "None"
+    }
+  },
+  {
+    "name": "Web SaaS",
+    "summary": "A multi-user web product with accounts and billing.",
+    "panes": {
+      "frontend": "React + Vite",
+      "backend": "Node + Express",
+      "database": "PostgreSQL",
+      "deployment": "Docker",
+      "pipes": "Stripe"
+    }
+  },
+  {
+    "name": "Static site",
+    "summary": "A fast content/marketing site with no backend state.",
+    "panes": {
+      "frontend": "SolidJS",
+      "backend": "Python + FastAPI",
+      "database": "None",
+      "deployment": "Vercel",
+      "pipes": "None"
+    }
+  }
+]
