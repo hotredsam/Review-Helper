@@ -31,6 +31,7 @@ export function NewProjectDialog({ open, onClose }: Props) {
   const importRepo = useProjectStore((s) => s.importRepo);
   const linkUrl = useProjectStore((s) => s.linkUrl);
   const createRepo = useProjectStore((s) => s.createRepo);
+  const syncClone = useProjectStore((s) => s.syncClone);
 
   const ghStatus = useGithubStore((s) => s.status);
   const repos = useGithubStore((s) => s.repos);
@@ -131,7 +132,10 @@ export function NewProjectDialog({ open, onClose }: Props) {
           <form
             onSubmit={(e: FormEvent) => {
               e.preventDefault();
-              void run(() => linkUrl(url));
+              void run(async () => {
+                const p = await linkUrl(url);
+                if (p.github_repo_url) void syncClone(p.id);
+              });
             }}
             className="space-y-3"
           >
@@ -153,7 +157,10 @@ export function NewProjectDialog({ open, onClose }: Props) {
           <form
             onSubmit={(e: FormEvent) => {
               e.preventDefault();
-              void run(() => createRepo(name, isPrivate));
+              void run(async () => {
+                const p = await createRepo(name, isPrivate);
+                if (p.github_repo_url) void syncClone(p.id);
+              });
             }}
             className="space-y-3"
           >
@@ -219,7 +226,12 @@ export function NewProjectDialog({ open, onClose }: Props) {
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => void run(() => importRepo(r))}
+                      onClick={() =>
+                        void run(async () => {
+                          const p = await importRepo(r);
+                          if (p.github_repo_url) void syncClone(p.id);
+                        })
+                      }
                       className="flex w-full items-center justify-between gap-2 border-b border-border px-3 py-2 text-left text-sm last:border-0 hover:bg-surface-2 disabled:opacity-60"
                     >
                       <span className="truncate text-fg">{r.full_name}</span>

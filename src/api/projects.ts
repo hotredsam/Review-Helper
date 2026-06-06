@@ -63,3 +63,9 @@ export function linkRepoByUrl(url: string): Promise<Project> {
 export function createRepoProject(name: string, isPrivate: boolean): Promise<Project> {
   return invoke<Project>("project_create_repo", { name, private: isPrivate });
 }
+
+/** Clone (or refresh) the project's repo into the local cache; returns the
+ *  project with its clone_path set. */
+export function cloneProject(id: number): Promise<Project> {
+  return invoke<Project>("project_clone", { projectId: id });
+}

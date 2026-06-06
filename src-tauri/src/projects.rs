@@ -90,6 +90,16 @@ pub fn insert_attached(
     get(conn, id)?.ok_or_else(|| "Failed to load project after insert.".into())
 }
 
+/// Record where a project's repo was cloned (the local cache dir).
+pub fn set_clone_path(conn: &Connection, id: i64, path: &str) -> Result<(), String> {
+    conn.execute(
+        "UPDATE projects SET clone_path = ?1, updated_at = datetime('now') WHERE id = ?2",
+        params![path, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn list(conn: &Connection) -> Result<Vec<Project>, String> {
     let sql = format!("SELECT {COLUMNS} FROM projects ORDER BY created_at ASC, id ASC");
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;

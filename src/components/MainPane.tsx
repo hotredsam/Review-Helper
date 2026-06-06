@@ -1,6 +1,7 @@
 import { FolderPlus } from "lucide-react";
 import { EmptyState } from "./EmptyState";
 import { SettingsView } from "./SettingsView";
+import { RepoCache } from "./RepoCache";
 import { sectionById } from "../nav/sections";
 import { useUiStore } from "../store/uiStore";
 import { useProjectStore } from "../store/projectStore";
@@ -41,13 +42,14 @@ export function MainPane({ onNewProject }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-border px-6 py-4">
+      <header className="flex items-center justify-between gap-3 border-b border-border px-6 py-4">
         <div>
           <p className="text-xs uppercase tracking-wide text-fg-subtle">
             {active ? active.name : "Review Helper"}
           </p>
           <h1 className="text-lg font-semibold text-fg">{section.label}</h1>
         </div>
+        {active?.github_repo_url && <RepoCache project={active} />}
       </header>
       <div className="flex-1 overflow-auto">
         {section.id === "settings" ? (

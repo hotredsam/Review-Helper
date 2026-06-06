@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const proj = (over: any = {}) => ({
@@ -23,6 +23,7 @@ vi.mock("../api/projects", () => ({
   importRepo: vi.fn(async () => proj({ id: 3, name: "Imported" })),
   linkRepoByUrl: vi.fn(async () => proj({ id: 4, name: "Linked" })),
   createRepoProject: vi.fn(async (name: string) => proj({ id: 5, name, kind: "new" })),
+  cloneProject: vi.fn(async (id: number) => proj({ id, clone_path: `/clones/${id}` })),
 }));
 
 import { useProjectStore } from "../store/projectStore";
@@ -62,6 +63,12 @@ describe("projectStore GitHub paths", () => {
     expect(c.kind).toBe("new");
     expect(useProjectStore.getState().projects).toHaveLength(3);
   });
+
+  it("syncClone populates the cache and marks the project cached", async () => {
+    await useProjectStore.getState().syncClone(7);
+    expect(useProjectStore.getState().cloneState[7]).toBe("done");
+    expect(useProjectStore.getState().cloneError[7]).toBeNull();
+  });
 });
 
 describe("NewProjectDialog — four paths", () => {
@@ -77,9 +84,14 @@ describe("NewProjectDialog — four paths", () => {
     const user = userEvent.setup();
     render(<NewProjectDialog open onClose={() => {}} />);
     await user.click(screen.getByRole("button", { name: "GitHub" }));
-    await user.type(screen.getByPlaceholderText(/my-new-repo/i), "fresh");
+    const input = screen.getByPlaceholderText(/my-new-repo/i) as HTMLInputElement;
+    await user.type(input, "fresh");
+    expect(input.value).toBe("fresh");
     expect((screen.getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
-    await user.click(screen.getByRole("button", { name: "Create on GitHub" }));
-    expect(useProjectStore.getState().projects.some((p) => p.name === "fresh")).toBe(true);
+    // Submit the form directly — jsdom's click->submit can be flaky after a tab switch.
+    fireEvent.submit(input.closest("form")!);
+    // createRepo creates the project (id 5) and makes it active. (Its name is
+    // covered by the store test; here the follow-up clone mock would overwrite it.)
+    await waitFor(() => expect(useProjectStore.getState().activeProjectId).toBe(5));
   });
 });

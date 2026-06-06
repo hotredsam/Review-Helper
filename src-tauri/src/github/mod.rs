@@ -7,6 +7,7 @@
 //! The model only ever reads the clone directory, never the token.
 
 pub mod api;
+pub mod clone;
 pub mod commands;
 pub mod device;
 pub mod keychain;

@@ -51,6 +51,7 @@ pub fn run() {
             github::commands::project_import_repo,
             github::commands::project_link_url,
             github::commands::project_create_repo,
+            github::commands::project_clone,
             projects::create_project,
             projects::list_projects,
             projects::get_project,

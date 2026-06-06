@@ -9,6 +9,7 @@ import {
   importRepo as importRepoApi,
   linkRepoByUrl,
   createRepoProject,
+  cloneProject,
 } from "../api/projects";
 import type { RepoSummary } from "../api/github";
 
@@ -19,6 +20,8 @@ interface ProjectState {
   activeProjectId: number | null;
   status: Status;
   error: string | null;
+  cloneState: Record<number, "idle" | "cloning" | "done" | "error">;
+  cloneError: Record<number, string | null>;
   load: () => Promise<void>;
   create: (name: string, kind: Project["kind"], appType?: string) => Promise<Project>;
   importRepo: (repo: RepoSummary) => Promise<Project>;
@@ -27,6 +30,7 @@ interface ProjectState {
   select: (id: number) => void;
   rename: (id: number, name: string) => Promise<void>;
   remove: (id: number) => Promise<void>;
+  syncClone: (id: number) => Promise<void>;
 }
 
 /**
@@ -41,6 +45,8 @@ export const useProjectStore = create<ProjectState>()(
       activeProjectId: null,
       status: "idle",
       error: null,
+      cloneState: {},
+      cloneError: {},
 
       load: async () => {
         set({ status: "loading", error: null });
@@ -102,6 +108,25 @@ export const useProjectStore = create<ProjectState>()(
             s.activeProjectId === id ? projects[0]?.id ?? null : s.activeProjectId;
           return { projects, activeProjectId };
         });
+      },
+
+      syncClone: async (id) => {
+        set((s) => ({
+          cloneState: { ...s.cloneState, [id]: "cloning" },
+          cloneError: { ...s.cloneError, [id]: null },
+        }));
+        try {
+          const updated = await cloneProject(id);
+          set((s) => ({
+            projects: s.projects.map((p) => (p.id === id ? updated : p)),
+            cloneState: { ...s.cloneState, [id]: "done" },
+          }));
+        } catch (e) {
+          set((s) => ({
+            cloneState: { ...s.cloneState, [id]: "error" },
+            cloneError: { ...s.cloneError, [id]: String(e) },
+          }));
+        }
       },
     }),
     {

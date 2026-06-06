@@ -2,10 +2,10 @@
 //! login name is cached in settings so status checks need no network.
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use crate::db::Db;
-use crate::github::{api, device, keychain};
+use crate::github::{api, clone, device, keychain};
 use crate::projects::{self, Project};
 use crate::settings;
 
@@ -198,6 +198,30 @@ pub fn project_create_repo(db: State<Db>, name: String, private: bool) -> Result
         Some(&summary.clone_url),
         Some(&summary.default_branch),
     )
+}
+
+/// Clone (or refresh) a project's repo into the app-data clone cache. Idempotent:
+/// the first call clones, later calls re-pull. Used on attach and on "refresh".
+#[tauri::command]
+pub fn project_clone(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Result<Project, String> {
+    let project = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        projects::get(&conn, project_id)?.ok_or("Project not found.")?
+    };
+    let url = project
+        .github_repo_url
+        .ok_or("This project isn't linked to a GitHub repo.")?;
+    let branch = project.default_branch.unwrap_or_else(|| "main".to_string());
+    let token = keychain::get_token()?.ok_or("Not connected to GitHub.")?;
+
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let dest = data_dir.join("clones").join(project_id.to_string());
+    clone::clone_or_refresh(&data_dir, &url, &dest, &branch, &token)?;
+
+    let dest_str = dest.to_string_lossy().to_string();
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    projects::set_clone_path(&conn, project_id, &dest_str)?;
+    projects::get(&conn, project_id)?.ok_or_else(|| "Project vanished after clone.".to_string())
 }
 
 #[cfg(test)]
