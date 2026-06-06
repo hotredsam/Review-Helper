@@ -6,6 +6,11 @@ import userEvent from "@testing-library/user-event";
 // it exists before the hoisted vi.mock factory runs.
 const backend = vi.hoisted(() => ({ rows: [] as any[], nextId: 1 }));
 
+// SettingsView mounts the ModelConsole, which subscribes to model events.
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => {}),
+}));
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string, args: any = {}) => {
     switch (cmd) {

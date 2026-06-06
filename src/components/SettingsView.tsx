@@ -1,4 +1,5 @@
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import { ModelConsole } from "./ModelConsole";
 
 /** Minimal Settings pane. Theme is functional now; the model provider and other
  *  options arrive in later phases. */
@@ -15,11 +16,14 @@ export function SettingsView() {
         <ThemeSwitcher />
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-fg">Model provider</h2>
-        <p className="text-sm text-fg-muted">
-          Connecting Claude and configuring local / credit options lands in the next phase.
-        </p>
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-fg">Model</h2>
+          <p className="text-sm text-fg-muted">
+            Review Helper drives the Claude Code CLI for all planning. Test the connection below.
+          </p>
+        </div>
+        <ModelConsole />
       </section>
     </div>
   );

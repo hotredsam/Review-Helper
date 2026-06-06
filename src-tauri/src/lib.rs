@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 mod db;
+pub mod model;
 mod projects;
 
 /// App identity returned to the frontend over the Tauri bridge.
@@ -35,6 +36,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
+            model::commands::model_run,
             projects::create_project,
             projects::list_projects,
             projects::get_project,
