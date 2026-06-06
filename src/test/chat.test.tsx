@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const ctrl = vi.hoisted(() => ({ cb: null as null | ((e: any) => void) }));
+const ctrl = vi.hoisted(() => ({ cb: null as null | ((e: any) => void), pending: [] as any[] }));
 
 vi.mock("../api/chat", () => ({
   chatSend: vi.fn(async () => {}),
@@ -9,14 +9,21 @@ vi.mock("../api/chat", () => ({
     return () => {};
   }),
 }));
+vi.mock("../api/suggestions", () => ({
+  suggestionsList: vi.fn(async () => ctrl.pending),
+}));
 
 import { useChatStore, ensureChatListener } from "../store/chatStore";
 import { chatSend } from "../api/chat";
+import { suggestionsList } from "../api/suggestions";
 
 beforeEach(() => {
-  useChatStore.setState({ messages: {}, session: {}, status: {}, error: {}, lastSuggestions: {} });
+  useChatStore.setState({ messages: {}, session: {}, status: {}, error: {}, lastSuggestions: {}, pending: {} });
+  ctrl.pending = [];
   vi.clearAllMocks();
 });
+
+const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe("chat store", () => {
   it("streams a turn and resumes the session across turns", async () => {
@@ -53,5 +60,17 @@ describe("chat store", () => {
     expect(useChatStore.getState().status[8]).toBe("error");
     expect(useChatStore.getState().error[8]).toBe("Claude not available");
     expect(useChatStore.getState().messages[8][1].streaming).toBe(false);
+  });
+
+  it("loads pending suggestions after a turn that produced them", async () => {
+    ctrl.pending = [
+      { id: 1, kind: "decision", payload: { topic: "DB", choice: "SQLite" }, status: "pending", created_at: "" },
+    ];
+    ensureChatListener();
+    await useChatStore.getState().send(9, "let's use sqlite");
+    ctrl.cb!({ type: "done", project_id: 9, session_id: "s", reply: "Good call.", suggestions: 1 });
+    await flush();
+    expect(vi.mocked(suggestionsList)).toHaveBeenCalledWith(9, "pending");
+    expect(useChatStore.getState().pending[9]).toHaveLength(1);
   });
 });

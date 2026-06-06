@@ -1,9 +1,27 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Loader2, Send, MessagesSquare } from "lucide-react";
+import { Loader2, Send, MessagesSquare, Lightbulb } from "lucide-react";
 import { useChatStore, ensureChatListener, type Message } from "../store/chatStore";
+import type { Suggestion } from "../api/suggestions";
 import type { Project } from "../api/projects";
 
 const EMPTY: Message[] = [];
+const EMPTY_SUG: Suggestion[] = [];
+
+function summarize(s: Suggestion): string {
+  const p = (s.payload ?? {}) as Record<string, string>;
+  switch (s.kind) {
+    case "decision":
+      return `${p.topic ?? "Decision"}: ${p.choice ?? ""}`;
+    case "feature":
+      return p.title ?? "Feature";
+    case "stack":
+      return `${p.pane ?? "Stack"}: ${p.choice ?? ""}`;
+    case "answer":
+      return p.question ?? "Answer";
+    default:
+      return s.kind;
+  }
+}
 
 /** Two-way chat: a grounded conversation that references project state and
  *  resumes across turns. Inferred updates surface as pending suggestions (T2). */
@@ -15,6 +33,9 @@ export function ChatPane({ project }: { project: Project }) {
   const status = useChatStore((s) => s.status[id] ?? "idle");
   const error = useChatStore((s) => s.error[id]);
   const send = useChatStore((s) => s.send);
+  const loadPending = useChatStore((s) => s.loadPending);
+  const pendingRaw = useChatStore((s) => s.pending[id]);
+  const pending = pendingRaw ?? EMPTY_SUG;
 
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -22,6 +43,9 @@ export function ChatPane({ project }: { project: Project }) {
   useEffect(() => {
     ensureChatListener();
   }, []);
+  useEffect(() => {
+    void loadPending(id); // surface any pre-existing pending proposals
+  }, [id, loadPending]);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
@@ -57,6 +81,29 @@ export function ChatPane({ project }: { project: Project }) {
           messages.map((m, i) => <Bubble key={i} message={m} />)
         )}
       </div>
+
+      {pending.length > 0 && (
+        <div className="mb-2 rounded-lg border border-border bg-surface p-3">
+          <div className="mb-1.5 flex items-center gap-1.5">
+            <Lightbulb className="h-4 w-4 text-accent" />
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+              Pending suggestions
+            </h3>
+            <span className="text-xs text-fg-subtle">— approve in Decisions</span>
+          </div>
+          <ul className="flex flex-wrap gap-1.5">
+            {pending.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-fg-muted"
+              >
+                <span className="font-medium capitalize text-fg-subtle">{s.kind}</span>
+                <span className="truncate">{summarize(s)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {error && (
         <p className="mb-2 text-sm text-danger" role="alert">

@@ -12,6 +12,7 @@ mod grill;
 pub mod model;
 mod plan;
 mod projects;
+mod suggestions;
 #[cfg(test)]
 mod seed_real;
 mod settings;
@@ -79,6 +80,7 @@ pub fn run() {
             grill::commands::grill_set_status,
             grill::commands::grill_delete,
             chat::commands::chat_send,
+            suggestions::commands::suggestions_list,
             projects::create_project,
             projects::list_projects,
             projects::get_project,

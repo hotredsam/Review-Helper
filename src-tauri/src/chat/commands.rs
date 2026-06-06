@@ -3,7 +3,7 @@
 //! updates into pending suggestions.
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use super::CHAT_SYSTEM;
 use crate::context::ProjectContext;
@@ -110,11 +110,23 @@ fn run_chat(
         }
     };
 
-    // T2 will parse + persist suggestions and strip their blocks from the reply.
+    // Split inferred updates out of the prose, persist them as PENDING
+    // suggestions (the user approves later), and show the clean reply.
+    let (reply, parsed) = super::parse_suggestions(&text);
+    let saved = if parsed.is_empty() {
+        0
+    } else {
+        let db = app.state::<Db>();
+        let n = match db.0.lock() {
+            Ok(mut conn) => crate::suggestions::save(&mut conn, project_id, &parsed).unwrap_or(0),
+            Err(_) => 0,
+        };
+        n // bind so the lock guard drops before `db`
+    };
     emit(ChatEvent::Done {
         project_id,
         session_id: new_session,
-        reply: text,
-        suggestions: 0,
+        reply,
+        suggestions: saved,
     });
 }

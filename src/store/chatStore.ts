@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { chatSend, onChatEvent, type ChatEvent } from "../api/chat";
+import { suggestionsList, type Suggestion } from "../api/suggestions";
 
 export interface Message {
   role: "user" | "assistant";
@@ -15,7 +16,9 @@ interface ChatStore {
   status: Record<number, Status>;
   error: Record<number, string | null>;
   lastSuggestions: Record<number, number>;
+  pending: Record<number, Suggestion[]>;
   send: (id: number, message: string) => Promise<void>;
+  loadPending: (id: number) => Promise<void>;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -24,6 +27,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   status: {},
   error: {},
   lastSuggestions: {},
+  pending: {},
+
+  loadPending: async (id) => {
+    try {
+      const ps = await suggestionsList(id, "pending");
+      set((s) => ({ pending: { ...s.pending, [id]: ps } }));
+    } catch {
+      // non-fatal: the chat still works without the proposals panel
+    }
+  },
 
   send: async (id, message) => {
     const msg = message.trim();
@@ -77,6 +90,7 @@ function handle(e: ChatEvent) {
         status: { ...s.status, [id]: "idle" },
         lastSuggestions: { ...s.lastSuggestions, [id]: e.suggestions },
       }));
+      if (e.suggestions > 0) void useChatStore.getState().loadPending(id);
       break;
     case "failed":
       patchLastAssistant(id, (m) => ({ ...m, streaming: false }));
