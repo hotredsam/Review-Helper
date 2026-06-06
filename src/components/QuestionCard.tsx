@@ -19,6 +19,7 @@ export function QuestionCard({ projectId, question }: { projectId: number; quest
   const [chatNote, setChatNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const chatId = `grill-chat-${question.id}`;
 
   const run = async (key: string, fn: () => Promise<void>) => {
     if (busy) return;
@@ -60,6 +61,8 @@ export function QuestionCard({ projectId, question }: { projectId: number; quest
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={2}
+        maxLength={10000}
+        aria-label={`Answer: ${question.text}`}
         placeholder="Your answer…"
         className="mt-2 w-full rounded-md border border-border bg-surface-2 px-2 py-1.5 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
       />
@@ -72,13 +75,14 @@ export function QuestionCard({ projectId, question }: { projectId: number; quest
         <Action label="I don't know" icon={HelpCircle} busy={busy === "idk"}
           onClick={() => void run("idk", () => setStatus(projectId, question.id, "unknown"))} />
         <Action label="Let's chat" icon={MessagesSquare} busy={false}
+          ariaExpanded={chatOpen} ariaControls={chatId}
           onClick={() => setChatOpen((v) => !v)} />
         <Action label="Delete" icon={Trash2} busy={busy === "del"}
           onClick={() => void run("del", () => remove(projectId, question.id))} />
       </div>
 
       {chatOpen && (
-        <div className="mt-2 rounded-md border border-border bg-surface-2 p-2">
+        <div id={chatId} className="mt-2 rounded-md border border-border bg-surface-2 p-2">
           <p className="mb-1 text-xs text-fg-subtle">
             Note what you concluded — the full chat opens here in a later phase:
           </p>
@@ -86,6 +90,8 @@ export function QuestionCard({ projectId, question }: { projectId: number; quest
             value={chatNote}
             onChange={(e) => setChatNote(e.target.value)}
             rows={2}
+            maxLength={10000}
+            aria-label="Chat resolution"
             placeholder="What did you decide?"
             className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-fg focus:border-accent focus:outline-none"
           />
@@ -115,6 +121,8 @@ function Action({
   busy,
   disabled,
   primary,
+  ariaExpanded,
+  ariaControls,
   onClick,
 }: {
   label: string;
@@ -122,6 +130,8 @@ function Action({
   busy: boolean;
   disabled?: boolean;
   primary?: boolean;
+  ariaExpanded?: boolean;
+  ariaControls?: string;
   onClick: () => void;
 }) {
   return (
@@ -129,6 +139,9 @@ function Action({
       type="button"
       onClick={onClick}
       disabled={busy || disabled}
+      aria-busy={busy}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
       className={
         "flex items-center gap-1 rounded-md px-2.5 py-1 text-xs disabled:opacity-60 " +
         (primary

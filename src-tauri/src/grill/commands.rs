@@ -1,6 +1,9 @@
 //! Grill commands: generate a batch of repo-specific questions on a background
 //! thread (streaming progress through events), and read questions back.
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -21,6 +24,12 @@ pub enum GrillEvent {
     Done { project_id: i64, added: usize },
     Failed { project_id: i64, detail: String },
 }
+
+/// Per-project generation gate: serializes concurrent grill_generate runs for a
+/// project so two don't both select the same uncovered topics, call the model
+/// (double-spend), and insert duplicates. The frontend guard is only advisory.
+#[derive(Default)]
+pub struct GrillGate(pub Mutex<HashMap<i64, Arc<Mutex<()>>>>);
 
 #[tauri::command]
 pub fn grill_generate(
@@ -45,6 +54,26 @@ fn run_grill(app: AppHandle, project_id: i64, depth: i64) {
     };
     emit(GrillEvent::Started { project_id });
     let db = app.state::<Db>();
+    let gate = app.state::<GrillGate>();
+
+    // Serialize generation per project (concurrent runs would double-spend +
+    // duplicate topics). Held across topic selection, the model call, and save.
+    let plock = {
+        let mut map = match gate.0.lock() {
+            Ok(m) => m,
+            Err(e) => return emit(GrillEvent::Failed { project_id, detail: e.to_string() }),
+        };
+        map.entry(project_id).or_default().clone()
+    };
+    let _guard = match plock.lock() {
+        Ok(g) => g,
+        Err(_) => {
+            return emit(GrillEvent::Failed {
+                project_id,
+                detail: "grill generation lock poisoned".into(),
+            })
+        }
+    };
 
     // Pick uncovered topics + assemble grounding context under one lock, then
     // release it before the (slow) model call.
@@ -106,7 +135,7 @@ fn run_grill(app: AppHandle, project_id: i64, depth: i64) {
     };
 
     let saved = match db.0.lock() {
-        Ok(conn) => save_questions(&conn, project_id, &questions),
+        Ok(mut conn) => save_questions(&mut conn, project_id, &questions),
         Err(e) => Err(e.to_string()),
     };
     match saved {
@@ -129,8 +158,8 @@ pub fn grill_answer(
     question_id: i64,
     body: String,
 ) -> Result<(), String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
-    super::answer_question(&conn, project_id, question_id, &body, "typed")
+    let mut conn = db.0.lock().map_err(|e| e.to_string())?;
+    super::answer_question(&mut conn, project_id, question_id, &body, "typed")
 }
 
 /// Write a chat resolution back into the card (the "Let's chat about this"
@@ -142,8 +171,8 @@ pub fn grill_chat_resolve(
     question_id: i64,
     resolution: String,
 ) -> Result<(), String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
-    super::answer_question(&conn, project_id, question_id, &resolution, "chat")
+    let mut conn = db.0.lock().map_err(|e| e.to_string())?;
+    super::answer_question(&mut conn, project_id, question_id, &resolution, "chat")
 }
 
 /// Dismiss a question as not relevant / unknown (both count as addressed).

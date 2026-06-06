@@ -22,6 +22,7 @@ export function DepthSlider({ projectId }: { projectId: number }) {
         onChange={(e) => setDepth(projectId, Number(e.target.value))}
         className="accent-accent"
         aria-label="Grill depth"
+        aria-valuetext={`about ${depth} hour${depth === 1 ? "" : "s"}`}
       />
       <span className="w-8 text-xs tabular-nums text-fg-subtle">~{depth}h</span>
     </div>

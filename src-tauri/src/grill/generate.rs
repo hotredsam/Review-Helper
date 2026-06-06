@@ -109,7 +109,13 @@ pub fn grill_user(topics: &[&BankTopic]) -> String {
     s
 }
 
-/// Parse + validate the model's question batch, dropping any empty entries.
+/// Max length (chars) for a generated question or recommended answer. Bounds
+/// DB growth on untrusted/oversized model output (mirrors the typed-answer cap).
+const MAX_FIELD: usize = 5_000;
+
+/// Parse + validate the model's question batch. Keeps only complete, bounded
+/// entries: every field non-empty and question/recommended_answer within
+/// MAX_FIELD. Empty/partial/oversized entries are dropped, not stored.
 pub fn parse_questions(raw: &str) -> Result<Vec<GenQuestion>, String> {
     let json = extract_json(raw).ok_or("No question JSON found in the output.")?;
     let batch: GenBatch = serde_json::from_str(json)
@@ -117,7 +123,14 @@ pub fn parse_questions(raw: &str) -> Result<Vec<GenQuestion>, String> {
     let qs: Vec<GenQuestion> = batch
         .questions
         .into_iter()
-        .filter(|q| !q.question.trim().is_empty())
+        .filter(|q| {
+            !q.question.trim().is_empty()
+                && !q.recommended_answer.trim().is_empty()
+                && !q.dimension.trim().is_empty()
+                && !q.bank_topic.trim().is_empty()
+                && q.question.len() <= MAX_FIELD
+                && q.recommended_answer.len() <= MAX_FIELD
+        })
         .collect();
     if qs.is_empty() {
         return Err("The model returned no usable questions.".into());
@@ -181,14 +194,19 @@ mod tests {
     }
 
     #[test]
-    fn parse_questions_extracts_and_filters() {
-        let raw = r#"Here you go:
-        {"questions":[
-          {"dimension":"vision","bank_topic":"Core problem","question":"What problem does X solve?","recommended_answer":"It solves Y."},
-          {"dimension":"users","bank_topic":"Primary user","question":"  ","recommended_answer":"skip me"}
-        ]}"#;
-        let qs = parse_questions(raw).unwrap();
-        assert_eq!(qs.len(), 1, "empty-question entry dropped");
+    fn parse_questions_keeps_only_complete_bounded_entries() {
+        let huge = "x".repeat(MAX_FIELD + 1);
+        let raw = format!(
+            r#"Here you go:
+        {{"questions":[
+          {{"dimension":"vision","bank_topic":"Core problem","question":"What problem does X solve?","recommended_answer":"It solves Y."}},
+          {{"dimension":"users","bank_topic":"Primary user","question":"  ","recommended_answer":"skip: empty question"}},
+          {{"dimension":"scope","bank_topic":"MVP","question":"Real question?","recommended_answer":""}},
+          {{"dimension":"data","bank_topic":"Entities","question":"{huge}","recommended_answer":"too long"}}
+        ]}}"#
+        );
+        let qs = parse_questions(&raw).unwrap();
+        assert_eq!(qs.len(), 1, "empty-question, empty-answer, and oversized entries dropped");
         assert_eq!(qs[0].bank_topic, "Core problem");
 
         assert!(parse_questions("not json").is_err());

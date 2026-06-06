@@ -22,11 +22,13 @@ pub struct Question {
     pub status: String,
 }
 
-/// Persist a generated batch as open questions. Returns the count added.
-pub fn save_questions(conn: &Connection, project_id: i64, qs: &[GenQuestion]) -> Result<usize, String> {
+/// Persist a generated batch as open questions, atomically. Returns the count
+/// added (a mid-batch failure rolls back — no orphan rows / half-saved batch).
+pub fn save_questions(conn: &mut Connection, project_id: i64, qs: &[GenQuestion]) -> Result<usize, String> {
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
     let mut added = 0;
     for q in qs {
-        conn.execute(
+        tx.execute(
             "INSERT INTO questions (project_id, dimension, bank_topic, text, recommended_answer, status) \
              VALUES (?1, ?2, ?3, ?4, ?5, 'open')",
             params![
@@ -40,6 +42,7 @@ pub fn save_questions(conn: &Connection, project_id: i64, qs: &[GenQuestion]) ->
         .map_err(|e| e.to_string())?;
         added += 1;
     }
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(added)
 }
 
@@ -69,7 +72,7 @@ pub fn list_questions(conn: &Connection, project_id: i64) -> Result<Vec<Question
 /// typed/audio/chat (schema CHECK). Used by Submit (typed) and the chat
 /// resolution path (chat) — a "Let's chat" outcome writes back into the card.
 pub fn answer_question(
-    conn: &Connection,
+    conn: &mut Connection,
     project_id: i64,
     question_id: i64,
     body: &str,
@@ -94,17 +97,19 @@ pub fn answer_question(
     if !exists {
         return Err("Question not found.".into());
     }
-    // Record the answer durably first, then flip the question's status.
-    conn.execute(
+    // Record the answer and flip the status atomically (no stranded open answer).
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    tx.execute(
         "INSERT INTO answers (question_id, project_id, body, source) VALUES (?1, ?2, ?3, ?4)",
         params![question_id, project_id, body, source],
     )
     .map_err(|e| e.to_string())?;
-    conn.execute(
+    tx.execute(
         "UPDATE questions SET status = 'answered' WHERE id = ?1 AND project_id = ?2",
         params![question_id, project_id],
     )
     .map_err(|e| e.to_string())?;
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -154,10 +159,10 @@ mod tests {
 
     #[test]
     fn saves_and_lists_questions_with_recommended_answers_and_dimensions() {
-        let conn = db();
+        let mut conn = db();
         let pid = project(&conn);
         let added = save_questions(
-            &conn,
+            &mut conn,
             pid,
             &[
                 gen("vision", "Core problem", "What problem does it solve?", "Tracks brisket cooks."),
@@ -177,15 +182,15 @@ mod tests {
 
     #[test]
     fn answering_records_an_answer_and_marks_answered() {
-        let conn = db();
+        let mut conn = db();
         let pid = project(&conn);
-        save_questions(&conn, pid, &[gen("vision", "Core problem", "Q?", "rec")]).unwrap();
+        save_questions(&mut conn, pid, &[gen("vision", "Core problem", "Q?", "rec")]).unwrap();
         let qid = list_questions(&conn, pid).unwrap()[0].id;
 
         // Empty answer rejected.
-        assert!(answer_question(&conn, pid, qid, "   ", "typed").is_err());
+        assert!(answer_question(&mut conn, pid, qid, "   ", "typed").is_err());
 
-        answer_question(&conn, pid, qid, "Solo pitmasters tracking cooks.", "typed").unwrap();
+        answer_question(&mut conn, pid, qid, "Solo pitmasters tracking cooks.", "typed").unwrap();
         assert_eq!(list_questions(&conn, pid).unwrap()[0].status, "answered");
         let body: String = conn
             .query_row("SELECT body FROM answers WHERE question_id = ?1", [qid], |r| r.get(0))
@@ -195,13 +200,13 @@ mod tests {
 
     #[test]
     fn lets_chat_resolution_writes_back_into_the_card() {
-        let conn = db();
+        let mut conn = db();
         let pid = project(&conn);
-        save_questions(&conn, pid, &[gen("scope", "MVP boundary", "Q?", "rec")]).unwrap();
+        save_questions(&mut conn, pid, &[gen("scope", "MVP boundary", "Q?", "rec")]).unwrap();
         let qid = list_questions(&conn, pid).unwrap()[0].id;
 
         // The chat resolution path stores a chat-sourced answer + marks answered.
-        answer_question(&conn, pid, qid, "We settled on a read-only v1.", "chat").unwrap();
+        answer_question(&mut conn, pid, qid, "We settled on a read-only v1.", "chat").unwrap();
         assert_eq!(list_questions(&conn, pid).unwrap()[0].status, "answered");
         let src: String = conn
             .query_row("SELECT source FROM answers WHERE question_id = ?1", [qid], |r| r.get(0))
@@ -211,10 +216,10 @@ mod tests {
 
     #[test]
     fn dismiss_and_delete_behave() {
-        let conn = db();
+        let mut conn = db();
         let pid = project(&conn);
         save_questions(
-            &conn,
+            &mut conn,
             pid,
             &[gen("ux", "First run", "a", "r"), gen("ux", "Error states", "b", "r")],
         )
