@@ -2,6 +2,7 @@ use serde::Serialize;
 use std::sync::Mutex;
 use tauri::Manager;
 
+pub mod context;
 mod db;
 mod github;
 pub mod model;
