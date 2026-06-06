@@ -2,6 +2,7 @@ use serde::Serialize;
 use std::sync::Mutex;
 use tauri::Manager;
 
+mod assess;
 pub mod context;
 mod db;
 mod github;
@@ -57,6 +58,8 @@ pub fn run() {
             plan::commands::analyze_project,
             plan::commands::kickoff_project,
             plan::commands::get_plan,
+            assess::commands::assess_project,
+            assess::commands::get_assessment,
             projects::create_project,
             projects::list_projects,
             projects::get_project,

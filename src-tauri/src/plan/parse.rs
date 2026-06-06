@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer};
 /// Accept a JSON string OR an array/number/bool/null and coerce to a string.
 /// Models occasionally return a prose field as a list of bullets; we join them
 /// rather than fail (and never fabricate content).
-fn flexible_string<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+pub(crate) fn flexible_string<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
     let v = serde_json::Value::deserialize(d)?;
     Ok(value_to_string(&v))
 }
@@ -94,7 +94,7 @@ pub fn parse_plan(raw: &str) -> Result<GeneratedPlan, String> {
 /// Find the first balanced `{ … }` object, ignoring braces inside string
 /// literals (so `{`/`}` in body_md or rationale don't confuse it). Returns the
 /// substring, or None if no balanced object exists.
-fn extract_json(raw: &str) -> Option<&str> {
+pub(crate) fn extract_json(raw: &str) -> Option<&str> {
     let s = raw.trim();
     let bytes = s.as_bytes();
     let start = s.find('{')?;
