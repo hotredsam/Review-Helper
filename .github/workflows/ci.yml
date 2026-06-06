@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main, planning]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Secrets gate
+        run: python3 scripts/scan_secrets.py $(git ls-files)
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install JS deps
+        run: npm ci
+
+      - name: Typecheck + build (frontend)
+        run: npm run build
+
+      - name: Frontend tests
+        run: npm test
+
+      # Backend unit tests (excludes #[ignore] real-model/keychain tests that
+      # need credentials). Covers the model providers, structured-proposal
+      # parsing, plan-merge status preservation, and issue matching.
+      - name: Backend tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
