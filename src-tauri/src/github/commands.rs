@@ -221,6 +221,8 @@ pub fn project_clone(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Resu
     let dest_str = dest.to_string_lossy().to_string();
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     projects::set_clone_path(&conn, project_id, &dest_str)?;
+    // Add Understand-hub cards for any tech detected in the freshly cloned repo.
+    let _ = crate::cards::detect_tech_in_clone(&conn, &dest_str);
     projects::get(&conn, project_id)?.ok_or_else(|| "Project vanished after clone.".to_string())
 }
 

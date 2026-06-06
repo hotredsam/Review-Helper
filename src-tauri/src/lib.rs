@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 mod assess;
+mod cards;
 pub mod context;
 mod db;
 mod github;
@@ -36,6 +37,7 @@ pub fn run() {
             // Open + migrate the SQLite database, then hand the connection to
             // Tauri's managed state so every command can reach it.
             let conn = db::connect_app_db(app.handle())?;
+            let _ = cards::seed(&conn); // best-effort seed of the curated cards
             app.manage(db::Db(Mutex::new(conn)));
             Ok(())
         })
@@ -60,6 +62,8 @@ pub fn run() {
             plan::commands::get_plan,
             assess::commands::assess_project,
             assess::commands::get_assessment,
+            cards::commands::cards_list,
+            cards::commands::card_get,
             projects::create_project,
             projects::list_projects,
             projects::get_project,
