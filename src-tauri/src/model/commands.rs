@@ -14,7 +14,7 @@ use crate::db::Db;
 use crate::settings::{load_model_config, ModelConfig, ProviderKind};
 
 /// The single place the active provider is chosen, from the persisted config.
-fn provider_for(config: &ModelConfig) -> Box<dyn ModelProvider> {
+pub(crate) fn provider_for(config: &ModelConfig) -> Box<dyn ModelProvider> {
     match config.provider {
         ProviderKind::Claude => Box::new(ClaudeCodeProvider::new()),
         ProviderKind::Local => Box::new(LocalStubProvider),

@@ -4,6 +4,7 @@ use tauri::Manager;
 
 mod assess;
 mod cards;
+mod chat;
 pub mod context;
 mod db;
 mod github;
@@ -77,6 +78,7 @@ pub fn run() {
             grill::commands::grill_chat_resolve,
             grill::commands::grill_set_status,
             grill::commands::grill_delete,
+            chat::commands::chat_send,
             projects::create_project,
             projects::list_projects,
             projects::get_project,

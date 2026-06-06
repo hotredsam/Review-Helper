@@ -6,6 +6,7 @@ import { PlanPane } from "./PlanPane";
 import { StatePane } from "./StatePane";
 import { UnderstandHub } from "./UnderstandHub";
 import { GrillPane } from "./GrillPane";
+import { ChatPane } from "./ChatPane";
 import { sectionById } from "../nav/sections";
 import { useUiStore } from "../store/uiStore";
 import { useProjectStore } from "../store/projectStore";
@@ -64,6 +65,8 @@ export function MainPane({ onNewProject }: Props) {
           <UnderstandHub />
         ) : section.id === "grill" && active ? (
           <GrillPane project={active} />
+        ) : section.id === "chat" && active ? (
+          <ChatPane project={active} />
         ) : section.id === "plan" && active ? (
           <PlanPane project={active} />
         ) : (
