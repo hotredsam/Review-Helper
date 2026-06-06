@@ -43,42 +43,44 @@ export const useDecisionsStore = create<DecisionsStore>((set, get) => ({
     }
   },
 
-  // Approving may add a decision/feature/stack/answer; refresh both lists.
+  // Reloads run only on success — a failure surfaces an error instead of being
+  // erased by a subsequent successful reload that clears it (loadPending resets
+  // error to null on success).
   approve: async (id, suggestionId) => {
     try {
       await suggestionApprove(id, suggestionId);
+      await get().loadPending(id);
+      await get().loadDecisions(id);
     } catch (e) {
       set((s) => ({ error: { ...s.error, [id]: String(e) } }));
     }
-    await get().loadPending(id);
-    await get().loadDecisions(id);
   },
 
   dismiss: async (id, suggestionId) => {
     try {
       await suggestionDismiss(id, suggestionId);
+      await get().loadPending(id);
     } catch (e) {
       set((s) => ({ error: { ...s.error, [id]: String(e) } }));
     }
-    await get().loadPending(id);
   },
 
   approveAll: async (id) => {
     try {
       await suggestionsApproveAll(id);
+      await get().loadPending(id);
+      await get().loadDecisions(id);
     } catch (e) {
       set((s) => ({ error: { ...s.error, [id]: String(e) } }));
     }
-    await get().loadPending(id);
-    await get().loadDecisions(id);
   },
 
   supersede: async (id, decisionId) => {
     try {
       await decisionSupersede(id, decisionId);
+      await get().loadDecisions(id);
     } catch (e) {
       set((s) => ({ error: { ...s.error, [id]: String(e) } }));
     }
-    await get().loadDecisions(id);
   },
 }));

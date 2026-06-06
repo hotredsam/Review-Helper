@@ -39,6 +39,7 @@ export function DecisionsPane({ project }: { project: Project }) {
             <button
               type="button"
               onClick={() => void approveAll(id)}
+              aria-label="Approve all pending suggestions"
               className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:bg-accent-hover"
             >
               <CheckCheck className="h-3.5 w-3.5" /> Approve all

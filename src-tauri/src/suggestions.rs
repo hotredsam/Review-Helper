@@ -40,7 +40,11 @@ fn valid_payload(kind: &str, payload: &str) -> bool {
     match kind {
         "decision" => has("topic") && has("choice"),
         "feature" => has("title"),
-        "stack" => has("pane") && has("choice"),
+        // pane must be a real stack pane (mirrors the schema CHECK + catalog).
+        "stack" => {
+            has("choice")
+                && obj.get("pane").and_then(Value::as_str).map(|p| crate::stack::PANES.contains(&p)).unwrap_or(false)
+        }
         "answer" => has("question") && has("answer"),
         _ => false,
     }
@@ -73,11 +77,11 @@ fn field(p: &Value, k: &str) -> String {
     p.get(k).and_then(Value::as_str).unwrap_or("").trim().to_string()
 }
 
-/// Approve a pending suggestion: write the record for its kind, then mark it
-/// approved — atomically. Each kind writes ONLY its own table (+ the
-/// suggestion's status); one approval never mutates unrelated rows.
-pub fn approve(conn: &mut Connection, project_id: i64, suggestion_id: i64) -> Result<(), String> {
-    let (kind, payload): (String, String) = conn
+/// Write the record for one pending suggestion + mark it approved, within an
+/// existing transaction. Each kind writes ONLY its own table (stack is the
+/// designed exception: it records a decision too, via stack::apply_one).
+fn approve_in_tx(tx: &Connection, project_id: i64, suggestion_id: i64) -> Result<(), String> {
+    let (kind, payload): (String, String) = tx
         .query_row(
             "SELECT kind, payload FROM suggestions WHERE id = ?1 AND project_id = ?2 AND status = 'pending'",
             params![suggestion_id, project_id],
@@ -88,7 +92,6 @@ pub fn approve(conn: &mut Connection, project_id: i64, suggestion_id: i64) -> Re
         .ok_or("Suggestion not found or already handled.")?;
     let p: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
 
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
     match kind.as_str() {
         "decision" => {
             tx.execute(
@@ -108,12 +111,10 @@ pub fn approve(conn: &mut Connection, project_id: i64, suggestion_id: i64) -> Re
             .map_err(|e| e.to_string())?;
         }
         "stack" => {
-            tx.execute(
-                "INSERT INTO stack_selections (project_id, pane, choice, rationale) VALUES (?1, ?2, ?3, ?4) \
-                 ON CONFLICT(project_id, pane) DO UPDATE SET choice = excluded.choice, rationale = excluded.rationale",
-                params![project_id, field(&p, "pane"), field(&p, "choice"), field(&p, "rationale")],
-            )
-            .map_err(|e| e.to_string())?;
+            // Reuse the canonical path so an approved stack suggestion behaves
+            // exactly like a direct selection: upsert + alternatives + a
+            // (superseding) decision, tagged source_ref='chat'.
+            crate::stack::apply_one(tx, project_id, &field(&p, "pane"), &field(&p, "choice"), "chat")?;
         }
         "answer" => {
             let body = format!("{}\n{}", field(&p, "question"), field(&p, "answer"));
@@ -130,6 +131,13 @@ pub fn approve(conn: &mut Connection, project_id: i64, suggestion_id: i64) -> Re
         params![suggestion_id, project_id],
     )
     .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Approve a pending suggestion (its own transaction).
+pub fn approve(conn: &mut Connection, project_id: i64, suggestion_id: i64) -> Result<(), String> {
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    approve_in_tx(&tx, project_id, suggestion_id)?;
     tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -148,7 +156,8 @@ pub fn dismiss(conn: &Connection, project_id: i64, suggestion_id: i64) -> Result
     Ok(())
 }
 
-/// Approve every pending suggestion for a project. Returns the count approved.
+/// Approve every pending suggestion for a project in ONE transaction — all
+/// succeed or none do (a mid-batch failure rolls the whole batch back).
 pub fn approve_all(conn: &mut Connection, project_id: i64) -> Result<usize, String> {
     let ids: Vec<i64> = {
         let mut stmt = conn
@@ -158,12 +167,12 @@ pub fn approve_all(conn: &mut Connection, project_id: i64) -> Result<usize, Stri
             .and_then(Iterator::collect)
             .map_err(|e| e.to_string())?
     };
-    let mut n = 0;
-    for id in ids {
-        approve(conn, project_id, id)?;
-        n += 1;
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    for &id in &ids {
+        approve_in_tx(&tx, project_id, id)?;
     }
-    Ok(n)
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(ids.len())
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -262,6 +271,7 @@ mod tests {
             ParsedSuggestion { kind: "decision".into(), payload: r#"{"choice":"only"}"#.into() }, // no topic
             ParsedSuggestion { kind: "feature".into(), payload: r#"{"detail":"no title"}"#.into() }, // no title
             ParsedSuggestion { kind: "stack".into(), payload: r#"{"pane":"frontend"}"#.into() }, // no choice
+            ParsedSuggestion { kind: "stack".into(), payload: r#"{"pane":"nope","choice":"X"}"#.into() }, // invalid pane
             ParsedSuggestion { kind: "decision".into(), payload: "{}".into() }, // empty object
             ParsedSuggestion { kind: "decision".into(), payload: oversized }, // too big
             ParsedSuggestion { kind: "feature".into(), payload: r#"{"title":"Good one"}"#.into() }, // valid
@@ -286,7 +296,8 @@ mod tests {
             &[
                 ParsedSuggestion { kind: "decision".into(), payload: r#"{"topic":"DB","choice":"SQLite","rationale":"local"}"#.into() },
                 ParsedSuggestion { kind: "feature".into(), payload: r#"{"title":"Export CSV","detail":"x"}"#.into() },
-                ParsedSuggestion { kind: "stack".into(), payload: r#"{"pane":"frontend","choice":"React"}"#.into() },
+                // choice must be a real catalog option for the pane.
+                ParsedSuggestion { kind: "stack".into(), payload: r#"{"pane":"frontend","choice":"React + Vite"}"#.into() },
             ],
         )
         .unwrap();
@@ -308,9 +319,40 @@ mod tests {
         let n = approve_all(&mut conn, pid).unwrap();
         assert_eq!(n, 1);
         assert_eq!(count(&conn, "SELECT count(*) FROM stack_selections"), 1);
+        // A stack approval behaves like a direct selection: it records a
+        // decision (source_ref='chat') and populates alternatives.
+        assert_eq!(
+            count(&conn, "SELECT count(*) FROM decisions WHERE topic='Stack: frontend' AND status='active' AND source_ref='chat'"),
+            1
+        );
+        let alts: String = conn
+            .query_row("SELECT alternatives FROM stack_selections WHERE pane='frontend'", [], |r| r.get(0))
+            .unwrap();
+        assert!(!alts.is_empty(), "alternatives populated from the catalog");
         assert!(list(&conn, pid, Some("pending")).unwrap().is_empty(), "queue cleared");
 
         // re-approving a handled suggestion errors.
         assert!(approve(&mut conn, pid, ids[0]).is_err());
+    }
+
+    #[test]
+    fn approve_all_is_atomic_on_failure() {
+        let mut conn = db();
+        let pid = project(&conn);
+        // A valid feature + a stack suggestion with a choice NOT in the catalog
+        // (passes save's pane-enum check, fails apply_one's catalog guard).
+        save(
+            &mut conn,
+            pid,
+            &[
+                ParsedSuggestion { kind: "feature".into(), payload: r#"{"title":"OK feature"}"#.into() },
+                ParsedSuggestion { kind: "stack".into(), payload: r#"{"pane":"frontend","choice":"NotInCatalog"}"#.into() },
+            ],
+        )
+        .unwrap();
+        assert!(approve_all(&mut conn, pid).is_err(), "the bad stack choice fails the batch");
+        // Atomic: the valid feature was NOT committed, nothing approved.
+        assert_eq!(count(&conn, "SELECT count(*) FROM features"), 0, "rolled back");
+        assert_eq!(list(&conn, pid, Some("pending")).unwrap().len(), 2, "both still pending");
     }
 }

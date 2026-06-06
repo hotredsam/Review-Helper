@@ -101,10 +101,25 @@ pub fn list_selections(conn: &Connection, project_id: i64) -> Result<Vec<Selecti
 }
 
 /// Apply one pane selection: upsert the selection row + record a decision
-/// (superseding the prior active stack decision for that pane). Caller wraps it
-/// in a transaction (a single override or a 5-pane pre-made apply).
-fn apply_one(conn: &Connection, project_id: i64, pane: &str, choice: &str) -> Result<(), String> {
+/// (superseding the prior active stack decision for that pane). `source_ref`
+/// tags the decision's origin ('stack' for direct selection, 'chat' when an
+/// approved suggestion drives it). Caller wraps it in a transaction (a single
+/// override, a 5-pane pre-made apply, or a suggestion approval). Validates the
+/// pane + that the choice exists in the catalog so a bad value can't slip in.
+pub fn apply_one(
+    conn: &Connection,
+    project_id: i64,
+    pane: &str,
+    choice: &str,
+    source_ref: &str,
+) -> Result<(), String> {
+    if !PANES.contains(&pane) {
+        return Err("Unknown stack pane.".into());
+    }
     let rationale = rationale_for(pane, choice);
+    if rationale.is_empty() {
+        return Err(format!("Stack choice '{choice}' is not in the catalog for '{pane}'."));
+    }
     let alternatives = alternatives_for(pane, choice);
     conn.execute(
         "INSERT INTO stack_selections (project_id, pane, choice, alternatives, rationale) VALUES (?1, ?2, ?3, ?4, ?5) \
@@ -115,14 +130,15 @@ fn apply_one(conn: &Connection, project_id: i64, pane: &str, choice: &str) -> Re
 
     let topic = format!("Stack: {pane}");
     conn.execute(
-        "UPDATE decisions SET status = 'superseded' WHERE project_id = ?1 AND topic = ?2 AND status = 'active'",
+        "UPDATE decisions SET status = 'superseded' \
+         WHERE project_id = ?1 AND topic = ?2 AND status = 'active' AND source_ref IN ('stack', 'chat')",
         params![project_id, topic],
     )
     .map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT INTO decisions (project_id, topic, choice, rationale, alternatives, source_ref, status) \
-         VALUES (?1, ?2, ?3, ?4, ?5, 'stack', 'active')",
-        params![project_id, topic, choice, rationale, alternatives],
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'active')",
+        params![project_id, topic, choice, rationale, alternatives, source_ref],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
@@ -137,7 +153,7 @@ pub fn set_selection(conn: &mut Connection, project_id: i64, pane: &str, choice:
         return Err("Choose an option.".into());
     }
     let tx = conn.transaction().map_err(|e| e.to_string())?;
-    apply_one(&tx, project_id, pane, choice)?;
+    apply_one(&tx, project_id, pane, choice, "stack")?;
     tx.commit().map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -145,10 +161,14 @@ pub fn set_selection(conn: &mut Connection, project_id: i64, pane: &str, choice:
 /// Apply a named pre-made stack to all five panes at once.
 pub fn apply_premade(conn: &mut Connection, project_id: i64, name: &str) -> Result<(), String> {
     let stack = premade().iter().find(|s| s.name == name).ok_or("Unknown stack.")?;
+    let missing: Vec<&str> = PANES.iter().copied().filter(|p| !stack.panes.contains_key(*p)).collect();
+    if !missing.is_empty() {
+        return Err(format!("Pre-made stack '{name}' is missing panes: {missing:?}"));
+    }
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     for &pane in PANES.iter() {
         if let Some(choice) = stack.panes.get(pane) {
-            apply_one(&tx, project_id, pane, choice)?;
+            apply_one(&tx, project_id, pane, choice, "stack")?;
         }
     }
     tx.commit().map_err(|e| e.to_string())?;
@@ -179,8 +199,10 @@ mod tests {
             assert!(!catalog().get(p).unwrap().is_empty(), "catalog has options for {p}");
         }
         assert!(premade().len() >= 2);
+        let expected: std::collections::HashSet<_> = PANES.iter().copied().collect();
         for s in premade() {
-            assert_eq!(s.panes.len(), 5, "premade {} sets all panes", s.name);
+            let keys: std::collections::HashSet<_> = s.panes.keys().map(String::as_str).collect();
+            assert_eq!(keys, expected, "premade {} keys must equal PANES", s.name);
         }
     }
 

@@ -43,6 +43,7 @@ export function StackPane({ project }: { project: Project }) {
               type="button"
               onClick={() => void applyPremade(id, p.name)}
               title={p.summary}
+              aria-label={`Apply ${p.name} stack: ${p.summary}`}
               className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-fg hover:border-accent hover:bg-surface-2"
             >
               {p.name}
