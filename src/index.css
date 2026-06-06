@@ -1,11 +1,40 @@
 @import "tailwindcss";
+@import "./theme/themes.css";
 
 /*
- * Phase 1 base styles. Deliberately palette-neutral: the four-theme token
- * system (Task 2) introduces every color as a CSS variable via `@theme inline`,
- * so nothing here hardcodes a color. Keep this file to structure + typography
- * defaults only.
+ * Map the semantic CSS-variable tokens onto Tailwind's color namespace.
+ * `@theme inline` is required (not plain `@theme`): it inlines each token's
+ * VALUE into the generated utility, so e.g. `bg-bg` emits `var(--bg)` directly
+ * and re-resolves when `[data-theme]` changes. Plain `@theme` would capture the
+ * value at :root and ignore runtime theme swaps.
  */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-overlay: var(--overlay);
+
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-hover: var(--accent-hover);
+
+  --color-success: var(--success);
+  --color-success-fg: var(--success-fg);
+  --color-warning: var(--warning);
+  --color-warning-fg: var(--warning-fg);
+  --color-danger: var(--danger);
+  --color-danger-fg: var(--danger-fg);
+
+  --color-ring: var(--ring);
+}
+
 :root {
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -23,4 +52,7 @@ body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
+  background-color: var(--bg);
+  color: var(--fg);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }

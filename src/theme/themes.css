@@ -1,0 +1,118 @@
+/*
+ * Theme token sets — the single source of color in the app. Every theme defines
+ * the SAME semantic token vocabulary; components reference tokens only (via the
+ * Tailwind utilities wired in index.css's `@theme inline`), never raw colors, so
+ * every surface works in all four themes.
+ *
+ * Add a theme: add a [data-theme="id"] block here AND a row in themes.ts.
+ * `:root` doubles as the default + the "light" theme (data-theme="light" inherits it).
+ */
+
+:root,
+[data-theme="light"] {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --overlay: #ffffff;
+
+  --fg: #1a1d23;
+  --fg-muted: #5b6472;
+  --fg-subtle: #8a93a3;
+
+  --border: #e2e6ec;
+  --border-strong: #cdd3dc;
+
+  --accent: #2563eb;
+  --accent-fg: #ffffff;
+  --accent-hover: #1d4ed8;
+
+  --success: #16a34a;
+  --success-fg: #ffffff;
+  --warning: #b45309;
+  --warning-fg: #ffffff;
+  --danger: #dc2626;
+  --danger-fg: #ffffff;
+
+  --ring: #2563eb;
+}
+
+[data-theme="dark"] {
+  --bg: #16181d;
+  --surface: #1d2026;
+  --surface-2: #262a31;
+  --overlay: #1d2026;
+
+  --fg: #e7e9ee;
+  --fg-muted: #a0a7b4;
+  --fg-subtle: #6c7480;
+
+  --border: #2e333c;
+  --border-strong: #3c424d;
+
+  --accent: #3b82f6;
+  --accent-fg: #ffffff;
+  --accent-hover: #60a5fa;
+
+  --success: #22c55e;
+  --success-fg: #052e16;
+  --warning: #f59e0b;
+  --warning-fg: #241a02;
+  --danger: #ef4444;
+  --danger-fg: #ffffff;
+
+  --ring: #3b82f6;
+}
+
+[data-theme="midnight"] {
+  --bg: #0f1424;
+  --surface: #161d33;
+  --surface-2: #1e2742;
+  --overlay: #161d33;
+
+  --fg: #e6ebff;
+  --fg-muted: #9aa6cc;
+  --fg-subtle: #65719a;
+
+  --border: #263150;
+  --border-strong: #344162;
+
+  --accent: #22d3ee;
+  --accent-fg: #04222a;
+  --accent-hover: #67e8f9;
+
+  --success: #34d399;
+  --success-fg: #04231a;
+  --warning: #fbbf24;
+  --warning-fg: #2a1d02;
+  --danger: #fb7185;
+  --danger-fg: #2a0511;
+
+  --ring: #22d3ee;
+}
+
+[data-theme="sand"] {
+  --bg: #f5efe6;
+  --surface: #fffaf2;
+  --surface-2: #ece3d4;
+  --overlay: #fffaf2;
+
+  --fg: #2b2620;
+  --fg-muted: #6b6052;
+  --fg-subtle: #9a8c79;
+
+  --border: #e3d8c6;
+  --border-strong: #d2c4ad;
+
+  --accent: #c2410c;
+  --accent-fg: #fff7ed;
+  --accent-hover: #9a3412;
+
+  --success: #4d7c0f;
+  --success-fg: #f7fee7;
+  --warning: #b45309;
+  --warning-fg: #fffbeb;
+  --danger: #b91c1c;
+  --danger-fg: #fef2f2;
+
+  --ring: #c2410c;
+}

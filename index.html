@@ -5,6 +5,25 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Review Helper</title>
+    <script>
+      // Anti-flash: apply the persisted theme before first paint. Reads the same
+      // localStorage key the Zustand store writes (src/theme/themes.ts).
+      (function () {
+        try {
+          var raw = localStorage.getItem("review-helper.theme");
+          var theme = "light";
+          if (raw) {
+            var saved = JSON.parse(raw);
+            if (saved && saved.state && saved.state.theme) {
+              theme = saved.state.theme;
+            }
+          }
+          document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      })();
+    </script>
   </head>
 
   <body>
