@@ -24,4 +24,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # `bundled` compiles SQLite from source (no system dependency, reproducible builds).
 rusqlite = { version = "0.40", features = ["bundled"] }
+# GitHub token lives in the macOS Keychain (v3.6 + apple-native; v4 split the API).
+keyring = { version = "3.6", features = ["apple-native"] }
+# Blocking HTTP for the GitHub REST API + device flow (native-tls = Security framework).
+reqwest = { version = "0.12", features = ["blocking", "json"] }
 

@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 mod db;
+mod github;
 pub mod model;
 mod projects;
 mod settings;
@@ -41,6 +42,12 @@ pub fn run() {
             model::commands::model_status,
             settings::get_model_config,
             settings::set_model_config,
+            github::commands::github_status,
+            github::commands::github_connect_gh,
+            github::commands::github_sign_out,
+            github::commands::github_list_repos,
+            github::commands::github_device_start,
+            github::commands::github_device_poll,
             projects::create_project,
             projects::list_projects,
             projects::get_project,
