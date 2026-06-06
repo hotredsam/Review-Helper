@@ -9,7 +9,7 @@ use crate::context::ProjectContext;
 use crate::db::Db;
 use crate::model::claude::ClaudeCodeProvider;
 use crate::model::{ModelEvent, ModelProvider, ModelRequest};
-use crate::plan::{parse, prompts, store};
+use crate::plan::{ingest, parse, prompts, store};
 use crate::projects;
 
 /// Streamed plan-generation progress (channel: `analysis-event`).
@@ -45,7 +45,14 @@ pub fn analyze_project(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Re
         ProjectContext::assemble(&conn, project_id)?.to_prompt()
     };
 
-    let mut req = ModelRequest::planning(prompts::ANALYSIS_USER);
+    // Pre-read existing planning docs so the first plan provably reflects them.
+    let docs = ingest::collect_existing_docs(&clone_path);
+    let user = if docs.is_empty() {
+        prompts::ANALYSIS_USER.to_string()
+    } else {
+        format!("{docs}\n\n{}", prompts::ANALYSIS_USER)
+    };
+    let mut req = ModelRequest::planning(user);
     req.system_append = Some(format!("{}\n\n{}", prompts::ANALYSIS_SYSTEM, context));
     req.cwd = Some(clone_path);
 
@@ -182,6 +189,55 @@ mod tests {
         assert_eq!(ctx.answers.len(), 1);
         assert_eq!(ctx.answers[0].answer, "A markdown note CLI");
         assert!(ctx.to_prompt().contains("What are you building?"));
+    }
+
+    #[test]
+    #[ignore = "runs a real model analysis ingesting a PLANNING.md; needs auth + uses credits. Run: cargo test -- --ignored"]
+    fn real_analysis_reflects_existing_planning_md() {
+        let dir = std::env::temp_dir().join(format!("rh-ingest-real-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("README.md"), "# recipes").unwrap();
+        std::fs::write(
+            dir.join("PLANNING.md"),
+            "# Roadmap\nThis project is a recipe-sharing web app.\n\
+             Phase 1: user accounts with email login.\n\
+             Phase 2: recipe CRUD with photo uploads.\n\
+             Phase 3: search recipes by ingredient.",
+        )
+        .unwrap();
+
+        let docs = ingest::collect_existing_docs(dir.to_str().unwrap());
+        assert!(!docs.is_empty(), "ingest should find the PLANNING.md");
+        let user = format!("{docs}\n\n{}", prompts::ANALYSIS_USER);
+        let mut req = ModelRequest::planning(user);
+        req.system_append = Some(prompts::ANALYSIS_SYSTEM.to_string());
+        req.cwd = Some(dir.to_string_lossy().to_string());
+        req.model = Some("sonnet".into());
+
+        let mut text = None;
+        ClaudeCodeProvider::new().run(&req, &mut |e: ModelEvent| {
+            if let ModelEvent::Completed { text: t, .. } = e {
+                text = Some(t);
+            }
+        });
+        let plan = parse::parse_plan(&text.expect("model returned a result")).expect("plan parses");
+        let blob = format!(
+            "{} {} {}",
+            plan.current_state,
+            plan.body_md,
+            plan.phases
+                .iter()
+                .map(|p| format!("{} {}", p.title, p.goal))
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+        .to_lowercase();
+        assert!(
+            blob.contains("recipe") || blob.contains("ingredient"),
+            "plan should reflect the PLANNING.md content, got: {blob}"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
