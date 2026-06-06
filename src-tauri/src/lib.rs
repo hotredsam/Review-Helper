@@ -69,6 +69,7 @@ pub fn run() {
             github::commands::project_clone,
             plan::commands::analyze_project,
             plan::commands::kickoff_project,
+            plan::commands::update_plan,
             plan::commands::get_plan,
             assess::commands::assess_project,
             assess::commands::get_assessment,

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Plus, Mic, X, AlertTriangle } from "lucide-react";
 import { useFeaturesStore } from "../store/featuresStore";
+import { usePlanStore } from "../store/planStore";
 import { transcribeAudioStub, type Feature } from "../api/features";
 import type { Project } from "../api/projects";
 
@@ -24,6 +25,7 @@ export function InboxPane({ project }: { project: Project }) {
   const load = useFeaturesStore((s) => s.load);
   const add = useFeaturesStore((s) => s.add);
   const setStatus = useFeaturesStore((s) => s.setStatus);
+  const updatePlan = usePlanStore((s) => s.update);
 
   const [title, setTitle] = useState("");
   const [micNote, setMicNote] = useState<string | null>(null);
@@ -86,9 +88,18 @@ export function InboxPane({ project }: { project: Project }) {
       )}
 
       {pending >= NUDGE_AT && (
-        <div className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
-          <AlertTriangle className="h-4 w-4" />
-          {pending} ideas waiting — a good time to update the plan (you choose when).
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
+          <span className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            {pending} ideas waiting — a good time to update the plan (you choose when).
+          </span>
+          <button
+            type="button"
+            onClick={() => void updatePlan(id)}
+            className="shrink-0 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-fg hover:bg-accent-hover"
+          >
+            Update plan
+          </button>
         </div>
       )}
 

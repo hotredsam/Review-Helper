@@ -19,6 +19,7 @@ export function PlanPane({ project }: { project: Project }) {
   const loadPlan = usePlanStore((s) => s.loadPlan);
   const analyze = usePlanStore((s) => s.analyze);
   const kickoff = usePlanStore((s) => s.kickoff);
+  const update = usePlanStore((s) => s.update);
   const [desc, setDesc] = useState("");
 
   useEffect(() => {
@@ -193,14 +194,23 @@ export function PlanPane({ project }: { project: Project }) {
         </section>
       )}
 
-      <div className="pt-2">
+      <div className="flex gap-2 pt-2">
         <button
           type="button"
-          onClick={() => void analyze(project.id)}
-          className="rounded-md border border-border px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-2"
+          onClick={() => void update(project.id)}
+          className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:bg-accent-hover"
         >
-          Re-analyze
+          Update plan
         </button>
+        {cloned && (
+          <button
+            type="button"
+            onClick={() => void analyze(project.id)}
+            className="rounded-md border border-border px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-2"
+          >
+            Re-analyze
+          </button>
+        )}
       </div>
     </div>
   );

@@ -104,6 +104,90 @@ pub fn save_generated_plan(
     Ok(version)
 }
 
+/// Carry per-phase (and per-task) completion from the prior plan version into
+/// `new_version`, matching phases by their stable `marker` and tasks by title.
+/// This is what prevents a plan update from restarting the builder at Phase 1.
+pub fn carry_status(conn: &mut Connection, project_id: i64, new_version: i64) -> Result<(), String> {
+    let prior = new_version - 1;
+    if prior < 1 {
+        return Ok(());
+    }
+
+    // Prior phases by marker: (prior_phase_id, status, github_issue_number).
+    let prior_phases: Vec<(String, i64, String, Option<i64>)> = {
+        let mut stmt = conn
+            .prepare("SELECT marker, id, status, github_issue_number FROM phases WHERE project_id = ?1 AND plan_version = ?2")
+            .map_err(|e| e.to_string())?;
+        stmt.query_map(params![project_id, prior], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<i64>>(3)?))
+        })
+        .and_then(Iterator::collect)
+        .map_err(|e| e.to_string())?
+    };
+
+    // New phases by marker: (new_phase_id, marker).
+    let new_phases: Vec<(i64, String)> = {
+        let mut stmt = conn
+            .prepare("SELECT id, marker FROM phases WHERE project_id = ?1 AND plan_version = ?2")
+            .map_err(|e| e.to_string())?;
+        stmt.query_map(params![project_id, new_version], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+            .and_then(Iterator::collect)
+            .map_err(|e| e.to_string())?
+    };
+
+    // Prior tasks per prior phase id: title -> status.
+    let prior_tasks: Vec<(i64, String, String)> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT t.phase_id, t.title, t.status FROM tasks t \
+                 JOIN phases p ON p.id = t.phase_id WHERE p.project_id = ?1 AND p.plan_version = ?2",
+            )
+            .map_err(|e| e.to_string())?;
+        stmt.query_map(params![project_id, prior], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+        })
+        .and_then(Iterator::collect)
+        .map_err(|e| e.to_string())?
+    };
+
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    for (new_id, marker) in &new_phases {
+        let Some((_, prior_id, status, issue)) = prior_phases.iter().find(|(m, ..)| m == marker) else {
+            continue; // a genuinely new phase — leave it not_started
+        };
+        tx.execute(
+            "UPDATE phases SET status = ?1, github_issue_number = ?2 WHERE id = ?3",
+            params![status, issue, new_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        // Carry task completion by title within this matched phase.
+        let prior_for_phase: Vec<(&String, &String)> = prior_tasks
+            .iter()
+            .filter(|(pid, ..)| pid == prior_id)
+            .map(|(_, title, st)| (title, st))
+            .collect();
+        let new_tasks: Vec<(i64, String)> = {
+            let mut stmt = tx
+                .prepare("SELECT id, title FROM tasks WHERE phase_id = ?1")
+                .map_err(|e| e.to_string())?;
+            stmt.query_map([new_id], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
+                .and_then(Iterator::collect)
+                .map_err(|e| e.to_string())?
+        };
+        for (tid, title) in new_tasks {
+            if let Some((_, st)) = prior_for_phase.iter().find(|(t, _)| **t == title) {
+                if st.as_str() != "not_started" {
+                    tx.execute("UPDATE tasks SET status = ?1 WHERE id = ?2", params![st, tid])
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+        }
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ---- Read the latest plan for the UI ----
 
 #[derive(Debug, Serialize)]
@@ -344,5 +428,29 @@ mod tests {
         let conn = db();
         let pid = project(&conn);
         assert!(get_plan(&conn, pid).unwrap().is_none());
+    }
+
+    #[test]
+    fn carry_status_preserves_completion_across_a_merge() {
+        let mut conn = db();
+        let pid = project(&conn);
+        let v1 = save_generated_plan(&mut conn, pid, &sample_plan()).unwrap();
+        // The builder completed the v1 phase + its task.
+        conn.execute("UPDATE phases SET status='done' WHERE project_id=?1 AND plan_version=?2", params![pid, v1]).unwrap();
+        conn.execute(
+            "UPDATE tasks SET status='done' WHERE phase_id IN (SELECT id FROM phases WHERE project_id=?1 AND plan_version=?2)",
+            params![pid, v1],
+        )
+        .unwrap();
+
+        // An update produces v2 with the same phase title (same marker).
+        let v2 = save_generated_plan(&mut conn, pid, &sample_plan()).unwrap();
+        assert_eq!(get_plan(&conn, pid).unwrap().unwrap().phases[0].status, "not_started", "fresh v2 starts not_started");
+
+        carry_status(&mut conn, pid, v2).unwrap();
+        let view = get_plan(&conn, pid).unwrap().unwrap();
+        assert_eq!(view.version, v2);
+        assert_eq!(view.phases[0].status, "done", "phase completion carried over by marker");
+        assert_eq!(view.phases[0].tasks[0].status, "done", "task completion carried over by title");
     }
 }

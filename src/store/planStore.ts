@@ -2,11 +2,13 @@ import { create } from "zustand";
 import {
   analyzeProject,
   kickoffProject,
+  updateProject,
   getPlan,
   onAnalysisEvent,
   type PlanView,
   type AnalysisEvent,
 } from "../api/analysis";
+import { useFeaturesStore } from "./featuresStore";
 
 type AnalysisState = "idle" | "running" | "error";
 
@@ -19,6 +21,7 @@ interface PlanStore {
   loadPlan: (id: number) => Promise<void>;
   analyze: (id: number) => Promise<void>;
   kickoff: (id: number, description: string) => Promise<void>;
+  update: (id: number) => Promise<void>;
 }
 
 export const usePlanStore = create<PlanStore>((set, get) => ({
@@ -70,6 +73,23 @@ export const usePlanStore = create<PlanStore>((set, get) => ({
       }));
     }
   },
+
+  update: async (id) => {
+    if (get().analysis[id] === "running") return; // don't double-spend a run
+    set((s) => ({
+      analysis: { ...s.analysis, [id]: "running" },
+      progress: { ...s.progress, [id]: [] },
+      error: { ...s.error, [id]: null },
+    }));
+    try {
+      await updateProject(id);
+    } catch (e) {
+      set((s) => ({
+        analysis: { ...s.analysis, [id]: "error" },
+        error: { ...s.error, [id]: String(e) },
+      }));
+    }
+  },
 }));
 
 function handle(e: AnalysisEvent) {
@@ -89,6 +109,8 @@ function handle(e: AnalysisEvent) {
     case "done":
       usePlanStore.setState((s) => ({ analysis: { ...s.analysis, [id]: "idle" } }));
       void usePlanStore.getState().loadPlan(id);
+      // A merge may have marked inbox features in_plan — refresh the inbox too.
+      void useFeaturesStore.getState().load(id);
       break;
     case "failed":
       usePlanStore.setState((s) => ({

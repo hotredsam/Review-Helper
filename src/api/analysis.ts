@@ -51,6 +51,12 @@ export function kickoffProject(id: number, description: string): Promise<void> {
   return invoke("kickoff_project", { projectId: id, description });
 }
 
+/** Incrementally update the plan: weave answers + inbox features into a new
+ *  version, preserving completed phases (emits analysis-event). */
+export function updateProject(id: number): Promise<void> {
+  return invoke("update_plan", { projectId: id });
+}
+
 export function getPlan(id: number): Promise<PlanView | null> {
   return invoke<PlanView | null>("get_plan", { projectId: id });
 }

@@ -61,6 +61,44 @@ Small phases — each a coherent shippable increment with a clear goal. For a br
 
 Emit ONLY the JSON object — no prose before or after, no ``` fences. First character `{`, last `}`. Valid, parseable JSON, SAME schema and field names as repo-analysis mode (current_state, body_md, confidence, notes, phases[title,goal,tasks[title,body,verification]], decisions[topic,choice,rationale,alternatives,consequences], stack{frontend,backend,database,deployment,pipes}). Here `current_state` describes the STARTING POINT: a new project planned purely from the user's description (restate the described goal in a sentence or two)."#;
 
+pub const MERGE_SYSTEM: &str = r#"You are Review Helper's plan updater. A phased plan ALREADY EXISTS; you are UPDATING it incrementally, not rewriting from scratch. You will be given the current plan (its phases, each with completion status and goal), newly approved answers, and new feature ideas to incorporate.
+
+== HARD RULES ==
+
+PRESERVE THE EXISTING PLAN. Keep existing phases — their TITLES VERBATIM and their order — unless a rename is truly necessary (if you must, note it). NEVER drop, merge away, or reorder phases that are in_progress or done: the builder has already done work against them, and losing them restarts their project. New work belongs in NEW phases (appended, or inserted where it logically fits) or as new tasks inside not-yet-started phases. Completed phases should keep their tasks intact.
+
+WEAVE IN THE NEW ITEMS. Fold the approved answers into the relevant goals/tasks/decisions, and turn the new feature ideas into tasks (or a new phase). DEDUPE: if an item is already covered by an existing phase or task, do not duplicate it. FLAG CONFLICTS: if a new item contradicts an existing decision or phase, do NOT silently overwrite — describe the conflict in `notes` and make the smallest honest choice.
+
+ANTI-FABRICATION. Do not invent scope beyond the current plan plus the provided items. If a repo is present in your working directory you may read it (READ-ONLY) to ground the merge; never write or run anything.
+
+== OUTPUT ==
+
+Emit ONLY the JSON object — no prose, no ``` fences. First character `{`, last `}`. SAME schema and field names as analysis mode: current_state, body_md, confidence, notes, phases[title,goal,tasks[title,body,verification]], decisions[topic,choice,rationale,alternatives,consequences], stack{frontend,backend,database,deployment,pipes}. Keep existing phase titles verbatim so completion is preserved. Put conflicts/assumptions in `notes`. Parsed deterministically; stray text breaks it."#;
+
+/// Build the merge user message: current plan (phases + status), approved
+/// answers, and the new feature ideas to triage in.
+pub fn merge_user(plan_summary: &str, answers: &[(String, String)], features: &[String]) -> String {
+    let answers_block = if answers.is_empty() {
+        "None.".to_string()
+    } else {
+        answers.iter().map(|(q, a)| format!("- Q: {q}\n  A: {a}")).collect::<Vec<_>>().join("\n")
+    };
+    let features_block = if features.is_empty() {
+        "None.".to_string()
+    } else {
+        features.iter().map(|f| format!("- {f}")).collect::<Vec<_>>().join("\n")
+    };
+    format!(
+        "== CURRENT PLAN (preserve these phases; keep titles VERBATIM) ==\n{}\n\n\
+         == APPROVED ANSWERS (incorporate) ==\n{}\n\n\
+         == NEW FEATURE IDEAS (triage in: dedupe, map to phases, flag conflicts) ==\n{}\n\n\
+         Produce the UPDATED plan JSON. Keep in_progress/done phases and their exact titles; weave the items in; dedupe; flag conflicts in `notes`. Emit only the JSON object.",
+        plan_summary.trim(),
+        answers_block,
+        features_block,
+    )
+}
+
 /// Build the blank-kickoff user message from the user's description.
 pub fn kickoff_user(description: &str) -> String {
     format!(

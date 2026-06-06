@@ -165,6 +165,111 @@ fn generate_plan(app: AppHandle, project_id: i64, req: ModelRequest) {
     }
 }
 
+/// Incrementally UPDATE the plan: weave approved answers + pending features into
+/// the existing plan as a new version, preserving completed phases (carry_status)
+/// and marking the incorporated features in_plan.
+#[tauri::command]
+pub fn update_plan(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Result<(), String> {
+    let (req, feature_ids) = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let project = projects::get(&conn, project_id)?.ok_or("Project not found.")?;
+        let plan = store::get_plan(&conn, project_id)?
+            .ok_or("No plan to update yet — analyze or kick off a plan first.")?;
+
+        let mut summary = String::new();
+        if let Some(cs) = plan.current_state.as_deref().filter(|s| !s.trim().is_empty()) {
+            summary.push_str(&format!("Current state: {cs}\n\n"));
+        }
+        summary.push_str("Phases:\n");
+        for ph in &plan.phases {
+            summary.push_str(&format!("- [{}] {}: {}\n", ph.status, ph.title, ph.goal.as_deref().unwrap_or("")));
+        }
+
+        let ctx = ProjectContext::assemble(&conn, project_id)?;
+        let answers: Vec<(String, String)> =
+            ctx.answers.iter().map(|a| (a.question.clone(), a.answer.clone())).collect();
+
+        let feats: Vec<crate::features::Feature> = crate::features::list(&conn, project_id)?
+            .into_iter()
+            .filter(|f| f.status == "inbox" || f.status == "triaged")
+            .collect();
+        let feature_lines: Vec<String> = feats
+            .iter()
+            .map(|f| match f.detail.as_deref().filter(|d| !d.trim().is_empty()) {
+                Some(d) => format!("{} — {}", f.title, d),
+                None => f.title.clone(),
+            })
+            .collect();
+        let feature_ids: Vec<i64> = feats.iter().map(|f| f.id).collect();
+
+        let mut req = ModelRequest::planning(prompts::merge_user(&summary, &answers, &feature_lines));
+        req.system_append = Some(format!("{}\n\n{}", prompts::MERGE_SYSTEM, ctx.to_prompt()));
+        if let Some(cp) = project.clone_path.as_deref() {
+            if std::path::Path::new(cp).join(".git").is_dir() {
+                req.cwd = Some(cp.to_string());
+            }
+        }
+        (req, feature_ids)
+    };
+
+    let app = app.clone();
+    std::thread::spawn(move || run_merge(app, project_id, req, feature_ids));
+    Ok(())
+}
+
+/// Like generate_plan, but after saving the new version it carries completion
+/// forward and marks the incorporated features in_plan.
+fn run_merge(app: AppHandle, project_id: i64, req: ModelRequest, feature_ids: Vec<i64>) {
+    let emit = |ev: AnalysisEvent| {
+        let _ = app.emit("analysis-event", &ev);
+    };
+    emit(AnalysisEvent::Started { project_id });
+
+    let mut final_text: Option<String> = None;
+    let mut failure: Option<String> = None;
+    ClaudeCodeProvider::new().run(&req, &mut |event: ModelEvent| match event {
+        ModelEvent::ToolUse { name } => emit(AnalysisEvent::Tool { project_id, name }),
+        ModelEvent::Completed { text, .. } => final_text = Some(text),
+        ModelEvent::Unavailable { detail, .. } | ModelEvent::Failed { detail } => failure = Some(detail),
+        _ => {}
+    });
+    if let Some(detail) = failure {
+        return emit(AnalysisEvent::Failed { project_id, detail });
+    }
+    let text = match final_text {
+        Some(t) => t,
+        None => return emit(AnalysisEvent::Failed { project_id, detail: "The model produced no result.".into() }),
+    };
+    let plan = match parse::parse_plan(&text) {
+        Ok(p) => p,
+        Err(detail) => return emit(AnalysisEvent::Failed { project_id, detail }),
+    };
+    let confidence = plan.confidence.clone();
+    let phases = plan.phases.len();
+
+    let db = app.state::<Db>();
+    let result: Result<i64, String> = match db.0.lock() {
+        Ok(mut conn) => match store::save_generated_plan(&mut conn, project_id, &plan) {
+            Ok(version) => match store::carry_status(&mut conn, project_id, version) {
+                Ok(()) => {
+                    // Mark the incorporated features in_plan — resets the pending count.
+                    for fid in &feature_ids {
+                        let _ = crate::features::set_status(&conn, project_id, *fid, "in_plan");
+                    }
+                    Ok(version)
+                }
+                Err(e) => Err(e),
+            },
+            Err(e) => Err(e),
+        },
+        Err(e) => Err(e.to_string()),
+    };
+    match result {
+        Ok(version) => emit(AnalysisEvent::Done { project_id, version, confidence, phases }),
+        Err(detail) => emit(AnalysisEvent::Failed { project_id, detail }),
+    }
+}
+
 #[tauri::command]
 pub fn get_plan(db: State<'_, Db>, project_id: i64) -> Result<Option<store::PlanView>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
