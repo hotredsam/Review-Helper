@@ -4,7 +4,7 @@
 //! pure package renderer; T2–T4 add the GitHub writes.
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub mod commands;
 pub mod issues;
@@ -187,26 +187,29 @@ pub fn push_planning_branch(conn: &Connection, project_id: i64) -> Result<usize,
     Ok(files.len())
 }
 
-/// The phases of the latest plan version as PhasePlans (for issue sync).
-fn phase_plans(conn: &Connection, project_id: i64) -> Result<Vec<PhasePlan>, String> {
-    let version: Option<i64> = conn
-        .query_row("SELECT MAX(version) FROM plans WHERE project_id = ?1", [project_id], |r| r.get(0))
+fn latest_version(conn: &Connection, project_id: i64) -> Result<Option<i64>, String> {
+    conn.query_row("SELECT MAX(version) FROM plans WHERE project_id = ?1", [project_id], |r| r.get(0))
         .optional()
-        .map_err(|e| e.to_string())?
-        .flatten();
-    let Some(version) = version else { return Ok(vec![]) };
-    let rows: Vec<(i64, String, String, Option<String>, String)> = {
+        .map_err(|e| e.to_string())
+        .map(Option::flatten)
+}
+
+/// The phases of the latest plan version as PhasePlans (for issue sync),
+/// including any recorded issue number so matching survives renames.
+fn phase_plans(conn: &Connection, project_id: i64) -> Result<Vec<PhasePlan>, String> {
+    let Some(version) = latest_version(conn, project_id)? else { return Ok(vec![]) };
+    let rows: Vec<(i64, String, String, Option<String>, String, Option<i64>)> = {
         let mut stmt = conn
-            .prepare("SELECT id, marker, title, goal, status FROM phases WHERE project_id = ?1 AND plan_version = ?2 ORDER BY idx")
+            .prepare("SELECT id, marker, title, goal, status, github_issue_number FROM phases WHERE project_id = ?1 AND plan_version = ?2 ORDER BY idx")
             .map_err(|e| e.to_string())?;
         stmt.query_map(params![project_id, version], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?))
         })
         .and_then(Iterator::collect)
         .map_err(|e| e.to_string())?
     };
     let mut out = Vec::new();
-    for (id, marker, title, goal, status) in rows {
+    for (id, marker, title, goal, status, issue) in rows {
         let mut ts = conn
             .prepare("SELECT title, status FROM tasks WHERE phase_id = ?1 ORDER BY idx")
             .map_err(|e| e.to_string())?;
@@ -214,92 +217,128 @@ fn phase_plans(conn: &Connection, project_id: i64) -> Result<Vec<PhasePlan>, Str
             .query_map([id], |r| Ok((r.get(0)?, r.get(1)?)))
             .and_then(Iterator::collect)
             .map_err(|e| e.to_string())?;
-        out.push(PhasePlan { marker, title, goal, status, tasks });
+        out.push(PhasePlan { marker, title, goal, status, tasks, issue_number: issue.map(|n| n as u64) });
     }
     Ok(out)
 }
 
-/// Preview the issue reconciliation (read-only — lists issues + computes actions).
-pub fn preview_issue_sync(conn: &Connection, project_id: i64) -> Result<Vec<IssueAction>, String> {
-    let (owner, repo, _) = owner_repo(conn, project_id)?;
+/// Everything a push-to-main would change — issue actions AND file deletions —
+/// so the user previews ALL destructive operations before confirming.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SyncPreview {
+    pub issue_actions: Vec<IssueAction>,
+    pub file_deletions: Vec<String>,
+}
+
+/// The outcome of an applied sync (partial-success aware).
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SyncResult {
+    pub files_pushed: usize,
+    pub issues_applied: usize,
+    pub files_deleted: usize,
+    pub failures: Vec<String>,
+}
+
+/// Read-only preview of the push-to-main: issue reconciliation + the stale
+/// phase docs that would be pruned. Nothing is written.
+pub fn preview_main_sync(conn: &Connection, project_id: i64) -> Result<SyncPreview, String> {
+    let (owner, repo, default_branch) = owner_repo(conn, project_id)?;
     let existing: Vec<IssueRef> = crate::github::api::list_issues(&owner, &repo)?
         .into_iter()
         .map(|g| IssueRef { number: g.number, title: g.title, body: g.body, state: g.state, labels: g.labels })
         .collect();
-    Ok(reconcile(&existing, &phase_plans(conn, project_id)?))
+    let issue_actions = reconcile(&existing, &phase_plans(conn, project_id)?);
+
+    let files = package(conn, project_id)?;
+    let keep: std::collections::HashSet<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    let file_deletions: Vec<String> = crate::github::api::list_dir(&owner, &repo, ".planning/phases", &default_branch)?
+        .into_iter()
+        .map(|(p, _)| p)
+        .filter(|p| !keep.contains(p.as_str()))
+        .collect();
+    Ok(SyncPreview { issue_actions, file_deletions })
 }
 
-/// Apply the issue reconciliation (re-derived for freshness). Records each
-/// phase's issue number back into the DB so re-syncs match without duplicates.
-pub fn apply_issue_sync(conn: &Connection, project_id: i64) -> Result<usize, String> {
-    let (owner, repo, _) = owner_repo(conn, project_id)?;
-    let version: Option<i64> = conn
-        .query_row("SELECT MAX(version) FROM plans WHERE project_id = ?1", [project_id], |r| r.get(0))
-        .optional()
-        .map_err(|e| e.to_string())?
-        .flatten();
-    let actions = preview_issue_sync(conn, project_id)?;
-    let mut n = 0;
-    for a in &actions {
-        match a {
-            IssueAction::Create { marker, title, body, state, label } => {
-                let num = crate::github::api::create_issue(&owner, &repo, title, body, &[label.as_str()])?;
-                if state == "closed" {
-                    crate::github::api::close_issue(&owner, &repo, num)?;
-                }
-                record_issue_number(conn, project_id, version, marker, num)?;
-                n += 1;
-            }
-            IssueAction::Update { number, marker, title, body, state, label } => {
-                crate::github::api::update_issue(&owner, &repo, *number, title, body, state, &[label.as_str()])?;
-                record_issue_number(conn, project_id, version, marker, *number)?;
-                n += 1;
-            }
-            IssueAction::Close { number, .. } => {
-                crate::github::api::close_issue(&owner, &repo, *number)?;
-                n += 1;
-            }
-        }
-    }
-    Ok(n)
-}
-
-fn record_issue_number(conn: &Connection, project_id: i64, version: Option<i64>, marker: &str, number: u64) -> Result<(), String> {
-    if let Some(v) = version {
-        conn.execute(
-            "UPDATE phases SET github_issue_number = ?1 WHERE project_id = ?2 AND plan_version = ?3 AND marker = ?4",
-            params![number as i64, project_id, v, marker],
-        )
-        .map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-/// Push the package to the default branch and prune stale phase docs that the
-/// current plan no longer includes (legacy removal — caller gates on confirm).
-pub fn push_main(conn: &Connection, project_id: i64) -> Result<usize, String> {
+/// Apply the CONFIRMED preview: push the package, replay the exact issue actions
+/// the user saw, and delete exactly the files shown. Re-runs/partials are safe
+/// (idempotent); failures are collected, not silently swallowed.
+pub fn apply_main_sync(conn: &mut Connection, project_id: i64, preview: SyncPreview) -> Result<SyncResult, String> {
     let (owner, repo, default_branch) = owner_repo(conn, project_id)?;
+    let version = latest_version(conn, project_id)?.ok_or("No plan to sync.")?;
     let files = package(conn, project_id)?;
     if files.is_empty() {
         return Err("No plan to sync yet — analyze or kick off a plan first.".into());
     }
-    push_files(&owner, &repo, &default_branch, &files)?;
+    let mut failures = Vec::new();
 
-    // Prune stale .planning/phases/*.md no longer in the package.
-    let keep: std::collections::HashSet<&str> = files.iter().map(|f| f.path.as_str()).collect();
-    for (path, sha) in crate::github::api::list_dir(&owner, &repo, ".planning/phases", &default_branch)? {
-        if !keep.contains(path.as_str()) {
-            crate::github::api::delete_file(
-                &owner,
-                &repo,
-                &path,
-                &sha,
-                &format!("Review Helper: remove stale {path}"),
-                &default_branch,
-            )?;
+    // 1. Push the package docs (create/update — non-destructive).
+    let mut files_pushed = 0;
+    for f in &files {
+        let sha = crate::github::api::file_sha(&owner, &repo, &f.path, &default_branch)?;
+        match crate::github::api::put_file(&owner, &repo, &f.path, &f.content, &format!("Review Helper: sync {}", f.path), &default_branch, sha.as_deref()) {
+            Ok(()) => files_pushed += 1,
+            Err(e) => failures.push(format!("push {}: {e}", f.path)),
         }
     }
-    Ok(files.len())
+
+    // 2. Replay the confirmed issue actions; record numbers atomically after.
+    let mut recorded: Vec<(String, u64)> = Vec::new();
+    let mut issues_applied = 0;
+    for a in &preview.issue_actions {
+        match a {
+            IssueAction::Create { marker, title, body, state, labels } => {
+                let lab: Vec<&str> = labels.iter().map(String::as_str).collect();
+                match crate::github::api::create_issue(&owner, &repo, title, body, &lab) {
+                    Ok(num) => {
+                        recorded.push((marker.clone(), num)); // record even if the close below fails
+                        if state == "closed" {
+                            if let Err(e) = crate::github::api::close_issue(&owner, &repo, num) {
+                                failures.push(format!("close new #{num}: {e}"));
+                            }
+                        }
+                        issues_applied += 1;
+                    }
+                    Err(e) => failures.push(format!("create '{title}': {e}")),
+                }
+            }
+            IssueAction::Update { number, marker, title, body, state, labels } => {
+                let lab: Vec<&str> = labels.iter().map(String::as_str).collect();
+                match crate::github::api::update_issue(&owner, &repo, *number, title, body, state, &lab) {
+                    Ok(()) => { recorded.push((marker.clone(), *number)); issues_applied += 1; }
+                    Err(e) => failures.push(format!("update #{number}: {e}")),
+                }
+            }
+            IssueAction::Close { number, .. } => match crate::github::api::close_issue(&owner, &repo, *number) {
+                Ok(()) => issues_applied += 1,
+                Err(e) => failures.push(format!("close #{number}: {e}")),
+            },
+        }
+    }
+    if !recorded.is_empty() {
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        for (marker, number) in &recorded {
+            tx.execute(
+                "UPDATE phases SET github_issue_number = ?1 WHERE project_id = ?2 AND plan_version = ?3 AND marker = ?4",
+                params![*number as i64, project_id, version, marker],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+    }
+
+    // 3. Delete exactly the previewed-and-confirmed stale files.
+    let mut files_deleted = 0;
+    for path in &preview.file_deletions {
+        match crate::github::api::file_sha(&owner, &repo, path, &default_branch)? {
+            Some(sha) => match crate::github::api::delete_file(&owner, &repo, path, &sha, &format!("Review Helper: remove stale {path}"), &default_branch) {
+                Ok(()) => files_deleted += 1,
+                Err(e) => failures.push(format!("delete {path}: {e}")),
+            },
+            None => files_deleted += 1, // already gone
+        }
+    }
+
+    Ok(SyncResult { files_pushed, issues_applied, files_deleted, failures })
 }
 
 fn render_claude_md(project_name: &str, plan: &PlanView) -> String {

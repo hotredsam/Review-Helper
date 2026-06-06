@@ -1,22 +1,17 @@
 import { useState } from "react";
-import { GitBranch } from "lucide-react";
-import {
-  syncPushPlanning,
-  syncIssuePreview,
-  syncIssueApply,
-  syncPushMain,
-  type IssueAction,
-} from "../api/sync";
+import { GitBranch, Trash2 } from "lucide-react";
+import { syncPushPlanning, syncMainPreview, syncMainApply, type SyncPreview } from "../api/sync";
 import type { Project } from "../api/projects";
 
 /**
  * GitHub sync-out. Pushing to the planning branch is non-destructive. Pushing to
- * main + changing issues is always previewed first and applied only on an
- * explicit confirm — nothing is closed/deleted on GitHub without the preview.
+ * main shows EVERY change first — issue creates/updates/closes AND file
+ * deletions — and applies only the exact previewed actions on an explicit
+ * confirm. Nothing is closed/deleted on GitHub without that preview.
  */
 export function SyncPanel({ project }: { project: Project }) {
   const id = project.id;
-  const [preview, setPreview] = useState<IssueAction[] | null>(null);
+  const [preview, setPreview] = useState<SyncPreview | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +32,8 @@ export function SyncPanel({ project }: { project: Project }) {
     }
   };
 
+  const destructive = preview ? preview.issue_actions.filter((a) => a.kind === "close").length + preview.file_deletions.length : 0;
+
   return (
     <section className="space-y-3 rounded-lg border border-border bg-surface p-4">
       <div className="flex items-center gap-2">
@@ -44,8 +41,8 @@ export function SyncPanel({ project }: { project: Project }) {
         <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">GitHub sync</h2>
       </div>
       <p className="text-sm text-fg-muted">
-        Push the planning package and phase issues. Changes to main and to issues are previewed before
-        anything is written.
+        Push the planning package and phase issues. Every change to main — including issue closes and
+        file deletions — is shown before anything is written.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -67,7 +64,8 @@ export function SyncPanel({ project }: { project: Project }) {
           disabled={!!busy}
           onClick={() =>
             void run("preview", async () => {
-              setPreview(await syncIssuePreview(id));
+              setMsg(null);
+              setPreview(await syncMainPreview(id));
             })
           }
           className="rounded-md border border-border px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-2 disabled:opacity-60"
@@ -88,37 +86,71 @@ export function SyncPanel({ project }: { project: Project }) {
       )}
 
       {preview && (
-        <div className="space-y-2 rounded-md border border-border bg-surface-2 p-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-            Issue changes ({preview.length})
-          </h3>
-          {preview.length === 0 ? (
-            <p className="text-sm text-fg-subtle">No issue changes — docs will still be pushed.</p>
-          ) : (
-            <ul className="space-y-0.5 text-sm">
-              {preview.map((a, i) => (
-                <li key={i} className="text-fg-muted">
-                  <span className="font-medium capitalize text-fg">{a.kind}</span>{" "}
-                  {a.kind === "close" ? `#${a.number} ` : ""}
-                  {"title" in a ? a.title : ""}
-                </li>
-              ))}
-            </ul>
+        <div className="space-y-3 rounded-md border border-border bg-surface-2 p-3">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+              Issue changes ({preview.issue_actions.length})
+            </h3>
+            {preview.issue_actions.length === 0 ? (
+              <p className="text-sm text-fg-subtle">No issue changes.</p>
+            ) : (
+              <ul className="mt-1 space-y-0.5 text-sm">
+                {preview.issue_actions.map((a, i) => (
+                  <li key={i} className="text-fg-muted">
+                    <span className="font-medium capitalize text-fg">{a.kind}</span>{" "}
+                    {a.kind === "close" ? `#${a.number} ` : ""}
+                    {"title" in a ? a.title : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {preview.file_deletions.length > 0 && (
+            <div>
+              <h3 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-danger">
+                <Trash2 className="h-3 w-3" /> Files to delete ({preview.file_deletions.length})
+              </h3>
+              <ul className="mt-1 space-y-0.5 text-sm">
+                {preview.file_deletions.map((p) => (
+                  <li key={p} className="text-fg-muted">
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
+
           <button
             type="button"
             disabled={!!busy}
             onClick={() =>
               void run("apply", async () => {
-                const issues = await syncIssueApply(id);
-                const files = await syncPushMain(id);
-                setPreview(null);
-                setMsg(`Synced ${issues} issue(s) and pushed ${files} files to main.`);
+                const r = await syncMainApply(id, preview);
+                if (r.failures.length === 0) {
+                  setPreview(null);
+                  setMsg(
+                    `Pushed ${r.files_pushed} files, synced ${r.issues_applied} issue(s), removed ${r.files_deleted} stale file(s).`,
+                  );
+                } else {
+                  // Keep the preview visible on partial failure.
+                  setError(`Some steps failed: ${r.failures.join("; ")}`);
+                  setMsg(`Partial: ${r.files_pushed} pushed, ${r.issues_applied} issues, ${r.files_deleted} deleted.`);
+                }
               })
             }
-            className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+            className={
+              "rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-60 " +
+              (destructive > 0
+                ? "bg-danger text-white hover:opacity-90"
+                : "bg-accent text-accent-fg hover:bg-accent-hover")
+            }
           >
-            {busy === "apply" ? "Pushing…" : "Confirm: sync issues + push to main"}
+            {busy === "apply"
+              ? "Pushing…"
+              : destructive > 0
+                ? `Confirm: push to main (${destructive} destructive)`
+                : "Confirm: push to main"}
           </button>
         </div>
       )}

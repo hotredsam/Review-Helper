@@ -2,22 +2,32 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+const ctrl = vi.hoisted(() => ({
+  preview: {
+    issue_actions: [
+      { kind: "create", marker: "phase-setup", title: "Setup", body: "", state: "open", labels: ["status:todo"] },
+      { kind: "close", number: 9, title: "Old phase" },
+    ],
+    file_deletions: [".planning/phases/phase-03-old.md"],
+  } as any,
+  result: { files_pushed: 4, issues_applied: 2, files_deleted: 1, failures: [] as string[] },
+}));
+
 vi.mock("../api/sync", () => ({
   syncPushPlanning: vi.fn(async () => 4),
-  syncIssuePreview: vi.fn(async () => [
-    { kind: "create", marker: "phase-setup", title: "Setup", body: "", state: "open", label: "status:todo" },
-    { kind: "close", number: 9, title: "Old phase" },
-  ]),
-  syncIssueApply: vi.fn(async () => 2),
-  syncPushMain: vi.fn(async () => 4),
+  syncMainPreview: vi.fn(async () => ctrl.preview),
+  syncMainApply: vi.fn(async () => ctrl.result),
 }));
 
 import { SyncPanel } from "../components/SyncPanel";
-import { syncPushPlanning, syncIssuePreview, syncIssueApply, syncPushMain } from "../api/sync";
+import { syncPushPlanning, syncMainPreview, syncMainApply } from "../api/sync";
 
 const project = (over: Partial<any> = {}) => ({ id: 1, github_repo_url: "https://github.com/o/r.git", ...over }) as any;
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  ctrl.result = { files_pushed: 4, issues_applied: 2, files_deleted: 1, failures: [] };
+});
 
 describe("SyncPanel", () => {
   it("hides for a project with no GitHub repo", () => {
@@ -33,19 +43,31 @@ describe("SyncPanel", () => {
     expect(await screen.findByText(/Pushed 4 files to the planning branch/i)).toBeTruthy();
   });
 
-  it("previews issue changes then applies + pushes to main on confirm", async () => {
+  it("previews issues + file deletions, then applies the confirmed preview", async () => {
     const user = userEvent.setup();
     render(<SyncPanel project={project()} />);
-    // Preview first (the confirm gate) — nothing is written yet.
     await user.click(screen.getByRole("button", { name: /Preview push to main/i }));
-    expect(vi.mocked(syncIssuePreview)).toHaveBeenCalledWith(1);
+    expect(vi.mocked(syncMainPreview)).toHaveBeenCalledWith(1);
+    // Both destructive surfaces shown before confirm.
     expect(await screen.findByText(/Issue changes \(2\)/i)).toBeTruthy();
-    expect(vi.mocked(syncIssueApply)).not.toHaveBeenCalled();
+    expect(screen.getByText(/Files to delete \(1\)/i)).toBeTruthy();
+    expect(screen.getByText(".planning/phases/phase-03-old.md")).toBeTruthy();
+    expect(vi.mocked(syncMainApply)).not.toHaveBeenCalled();
 
-    // Confirm applies issues + pushes docs.
-    await user.click(screen.getByRole("button", { name: /Confirm: sync issues/i }));
-    expect(vi.mocked(syncIssueApply)).toHaveBeenCalledWith(1);
-    expect(vi.mocked(syncPushMain)).toHaveBeenCalledWith(1);
-    expect(await screen.findByText(/Synced 2 issue\(s\) and pushed 4 files to main/i)).toBeTruthy();
+    // Confirm replays the exact previewed actions.
+    await user.click(screen.getByRole("button", { name: /Confirm: push to main/i }));
+    expect(vi.mocked(syncMainApply)).toHaveBeenCalledWith(1, ctrl.preview);
+    expect(await screen.findByText(/removed 1 stale file/i)).toBeTruthy();
+  });
+
+  it("keeps the preview visible and reports partial failures", async () => {
+    ctrl.result = { files_pushed: 4, issues_applied: 1, files_deleted: 0, failures: ["close #9: 403"] };
+    const user = userEvent.setup();
+    render(<SyncPanel project={project()} />);
+    await user.click(screen.getByRole("button", { name: /Preview push to main/i }));
+    await user.click(await screen.findByRole("button", { name: /Confirm: push to main/i }));
+    expect(await screen.findByText(/Some steps failed: close #9: 403/i)).toBeTruthy();
+    // Preview not cleared on failure.
+    expect(screen.getByText(/Issue changes \(2\)/i)).toBeTruthy();
   });
 });

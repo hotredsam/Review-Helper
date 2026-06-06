@@ -195,6 +195,19 @@ pub(crate) fn b64encode(input: &[u8]) -> String {
     out
 }
 
+/// Percent-encode a repo path, preserving `/` separators. Today's generated
+/// paths are slug-safe, but this future-proofs against spaces/#/?/unicode.
+fn enc_path(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    for b in path.bytes() {
+        match b {
+            b'/' | b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
 fn req_get(url: String) -> Result<reqwest::blocking::Response, String> {
     http_client()?
         .get(url)
@@ -239,7 +252,7 @@ pub fn ensure_branch(owner: &str, repo: &str, branch: &str, from_sha: &str) -> R
 
 /// The blob sha of a file on a branch, or None if it doesn't exist.
 pub fn file_sha(owner: &str, repo: &str, path: &str, branch: &str) -> Result<Option<String>, String> {
-    let resp = req_get(format!("{API}/repos/{owner}/{repo}/contents/{path}?ref={branch}"))?;
+    let resp = req_get(format!("{API}/repos/{owner}/{repo}/contents/{}?ref={branch}", enc_path(path)))?;
     if resp.status().as_u16() == 404 {
         return Ok(None);
     }
@@ -270,13 +283,16 @@ pub fn put_file(
         body["sha"] = serde_json::json!(s);
     }
     let resp = http_client()?
-        .put(format!("{API}/repos/{owner}/{repo}/contents/{path}"))
+        .put(format!("{API}/repos/{owner}/{repo}/contents/{}", enc_path(path)))
         .bearer_auth(token()?)
         .header("Accept", ACCEPT)
         .header("X-GitHub-Api-Version", API_VERSION)
         .json(&body)
         .send()
         .map_err(|e| e.to_string())?;
+    if resp.status().as_u16() == 409 {
+        return Err(format!("'{path}' was modified on GitHub since the preview — re-preview and try again."));
+    }
     if !resp.status().is_success() {
         return Err(status_error(resp.status()));
     }
@@ -293,19 +309,24 @@ pub struct GhIssue {
     pub labels: Vec<String>,
 }
 
-/// List a repo's issues (open + closed), excluding pull requests.
+/// List a repo's issues (open + closed), excluding pull requests. Paginated so
+/// repos with >100 issues don't hide owned issues (which would create dupes).
 pub fn list_issues(owner: &str, repo: &str) -> Result<Vec<GhIssue>, String> {
-    let resp = req_get(format!("{API}/repos/{owner}/{repo}/issues?state=all&per_page=100"))?;
-    if !resp.status().is_success() {
-        return Err(status_error(resp.status()));
-    }
-    let arr: Vec<serde_json::Value> = resp.json().map_err(|e| e.to_string())?;
-    Ok(arr
-        .into_iter()
-        .filter(|v| v.get("pull_request").is_none()) // the issues endpoint includes PRs
-        .filter_map(|v| {
-            Some(GhIssue {
-                number: v.get("number")?.as_u64()?,
+    let mut all = Vec::new();
+    for page in 1..=50u32 {
+        let resp = req_get(format!("{API}/repos/{owner}/{repo}/issues?state=all&per_page=100&page={page}"))?;
+        if !resp.status().is_success() {
+            return Err(status_error(resp.status()));
+        }
+        let arr: Vec<serde_json::Value> = resp.json().map_err(|e| e.to_string())?;
+        let n = arr.len();
+        for v in arr {
+            if v.get("pull_request").is_some() {
+                continue; // the issues endpoint includes PRs
+            }
+            let Some(number) = v.get("number").and_then(serde_json::Value::as_u64) else { continue };
+            all.push(GhIssue {
+                number,
                 title: v.get("title").and_then(serde_json::Value::as_str).unwrap_or("").to_string(),
                 body: v.get("body").and_then(serde_json::Value::as_str).unwrap_or("").to_string(),
                 state: v.get("state").and_then(serde_json::Value::as_str).unwrap_or("open").to_string(),
@@ -314,9 +335,13 @@ pub fn list_issues(owner: &str, repo: &str) -> Result<Vec<GhIssue>, String> {
                     .and_then(serde_json::Value::as_array)
                     .map(|ls| ls.iter().filter_map(|l| l.get("name").and_then(serde_json::Value::as_str).map(String::from)).collect())
                     .unwrap_or_default(),
-            })
-        })
-        .collect())
+            });
+        }
+        if n < 100 {
+            break;
+        }
+    }
+    Ok(all)
 }
 
 /// Create an issue. Returns its number.
@@ -379,7 +404,7 @@ pub fn close_issue(owner: &str, repo: &str, number: u64) -> Result<(), String> {
 /// List a directory's files on a branch: (path, blob sha). Empty if the dir
 /// doesn't exist.
 pub fn list_dir(owner: &str, repo: &str, path: &str, branch: &str) -> Result<Vec<(String, String)>, String> {
-    let resp = req_get(format!("{API}/repos/{owner}/{repo}/contents/{path}?ref={branch}"))?;
+    let resp = req_get(format!("{API}/repos/{owner}/{repo}/contents/{}?ref={branch}", enc_path(path)))?;
     if resp.status().as_u16() == 404 {
         return Ok(vec![]);
     }
@@ -402,14 +427,15 @@ pub fn list_dir(owner: &str, repo: &str, path: &str, branch: &str) -> Result<Vec
 /// Delete a file on a branch (Contents API DELETE).
 pub fn delete_file(owner: &str, repo: &str, path: &str, sha: &str, message: &str, branch: &str) -> Result<(), String> {
     let resp = http_client()?
-        .delete(format!("{API}/repos/{owner}/{repo}/contents/{path}"))
+        .delete(format!("{API}/repos/{owner}/{repo}/contents/{}", enc_path(path)))
         .bearer_auth(token()?)
         .header("Accept", ACCEPT)
         .header("X-GitHub-Api-Version", API_VERSION)
         .json(&serde_json::json!({ "message": message, "sha": sha, "branch": branch }))
         .send()
         .map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
+    // 404 = already gone — treat as success so a re-run can make progress.
+    if resp.status().as_u16() != 404 && !resp.status().is_success() {
         return Err(status_error(resp.status()));
     }
     Ok(())
