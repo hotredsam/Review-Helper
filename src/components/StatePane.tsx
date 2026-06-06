@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { Loader2, Gauge, AlertTriangle } from "lucide-react";
 import { useAssessStore, ensureAssessListener } from "../store/assessStore";
 import { RadarChart, Gauge as ScoreGauge } from "./charts";
+import { InfoDot } from "./InfoDot";
 import type { DimScore } from "../api/assessment";
 import type { Project } from "../api/projects";
 
@@ -119,7 +120,13 @@ export function StatePane({ project }: { project: Project }) {
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Vibecoding dimensions</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+          Vibecoding dimensions
+          <InfoDot
+            term="vibecoding dimensions"
+            explanation="Six qualities of a project built the right way — architecture, modularity, context hygiene, security, git discipline, and workflow — each scored 0–100 from the repo."
+          />
+        </h2>
         {DIMENSIONS.map(([key, label]) => (
           <ScoreRow key={key} label={label} dim={assessment.dimensions?.[key]} />
         ))}

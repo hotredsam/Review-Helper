@@ -3,8 +3,10 @@ import { Sidebar } from "./components/Sidebar";
 import { MainPane } from "./components/MainPane";
 import { NewProjectDialog } from "./components/NewProjectDialog";
 import { ModelBanner } from "./components/ModelBanner";
+import { Tour, tourSeen } from "./components/Tour";
 import { useProjectStore } from "./store/projectStore";
 import { useStatusStore } from "./store/statusStore";
+import { useUiStore } from "./store/uiStore";
 
 /**
  * App shell: loads projects from the database on mount, then renders the
@@ -17,10 +19,19 @@ function App() {
   const projects = useProjectStore((s) => s.projects);
   const [dialogOpen, setDialogOpen] = useState(false);
   const refreshStatus = useStatusStore((s) => s.refresh);
+  const tourOpen = useUiStore((s) => s.tourOpen);
+  const setTourOpen = useUiStore((s) => s.setTourOpen);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // First run: a fresh profile (no projects, tour unseen) gets the welcome tour.
+  useEffect(() => {
+    if (status === "ready" && projects.length === 0 && !tourSeen()) {
+      setTourOpen(true);
+    }
+  }, [status, projects.length, setTourOpen]);
 
   useEffect(() => {
     void refreshStatus();
@@ -45,6 +56,7 @@ function App() {
         </main>
       </div>
       <NewProjectDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      {tourOpen && <Tour onClose={() => setTourOpen(false)} />}
     </div>
   );
 }

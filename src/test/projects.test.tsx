@@ -87,6 +87,7 @@ beforeEach(() => {
   backend.rows = [];
   backend.nextId = 1;
   localStorage.clear();
+  localStorage.setItem("rh.tour.seen", "1"); // don't pop the welcome tour over these flows
   useProjectStore.setState({ projects: [], activeProjectId: null, status: "idle", error: null });
   useUiStore.setState({ sidebarCollapsed: false, activeSection: "overview" });
 });
