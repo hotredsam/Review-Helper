@@ -6,6 +6,7 @@ pub mod context;
 mod db;
 mod github;
 pub mod model;
+mod plan;
 mod projects;
 mod settings;
 
@@ -53,6 +54,8 @@ pub fn run() {
             github::commands::project_link_url,
             github::commands::project_create_repo,
             github::commands::project_clone,
+            plan::commands::analyze_project,
+            plan::commands::get_plan,
             projects::create_project,
             projects::list_projects,
             projects::get_project,
