@@ -1,68 +1,125 @@
-# Review Helper — build package
+<div align="center">
 
-Repo: https://github.com/hotredsam/Review-Helper
+<img src="./docs/banner.svg" alt="Review Helper" width="100%" />
 
-This package is the planning + enforcement setup for a macOS desktop app that helps you vibecode the right way: analyze a project, score it, grill you until it's specified well enough to build, teach you as you go, and push a consistent plan + phased GitHub issues. You hand the plan to Claude Code and build it phase by phase.
+<br/>
 
-**It's laid out to mirror the repo** — most of it drops straight in.
+**A macOS desktop app that helps you _vibecode the right way_ — analyze a project, score it, and get grilled until it's specified well enough to actually build.**
 
-## Layout
+<br/>
 
+![macOS](https://img.shields.io/badge/macOS-desktop-111?logo=apple&logoColor=white)
+![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)
+![Rust](https://img.shields.io/badge/Rust-backend-CE412B?logo=rust&logoColor=white)
+![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Tailwind v4](https://img.shields.io/badge/Tailwind-v4-38BDF8?logo=tailwindcss&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-embedded-003B57?logo=sqlite&logoColor=white)
+<br/>
+![status](https://img.shields.io/badge/status-in%20development-F5A623)
+![phase](https://img.shields.io/badge/roadmap-Phase%201%20of%2014%20done-3FB950)
+
+</div>
+
+---
+
+## What is this?
+
+Review Helper turns _"I have a vague app idea"_ into a build you can trust. It points a model at your project (or just your plan), scores it across the dimensions that make AI-assisted builds succeed or fail, interrogates the gaps, teaches you the concepts as you go, and produces a single consistent **phased plan** synced to GitHub issues. You hand that plan to your coding agent and build it phase by phase — with the guardrails already in place.
+
+It's one self-contained native app: a Rust backend with embedded SQLite and a React UI. No servers to run, no separate database to launch.
+
+## Why
+
+Most AI-assisted projects don't fail at the code — they fail at the **spec**: under-specified ideas, the model loose in your filesystem, secrets committed by accident, finished work silently rebuilt. Review Helper closes those failure modes by construction.
+
+> [!NOTE]
+> **The model is read-only against your source.** Planning and analysis run with read/search tools only — never write, edit, or shell. The app performs every file write, commit, and issue change itself, and only after you approve it. Model-inferred changes arrive as **pending suggestions**, never silent writes; secrets are blocked from commits by a deterministic scanner; and the database schema ships pre-tested.
+
+## Features
+
+- 🔍 **Analyze & score** — six vibecoding dimensions, a separate production-readiness scorecard, and a hygiene check, all 0–100 and grounded in real repo metrics rather than vibes.
+- 🔥 **Grill-me** — repo-specific questions (each with a draft answer) that pin down what you're actually building; a depth slider and a **Detail Coverage** meter tell you when you've specified enough.
+- 📚 **Understand hub** — a self-extending learning hub spanning architecture, frontend, backend, pipes, deployment, business, design and UX. Understanding is the main activity here, not a glossary in the corner.
+- 🧭 **Plan → GitHub** — one consistent phased plan, synced one-way to issues (one per phase, matched by a stable marker so re-pushes update instead of duplicating), behind a gated, fully-previewed push to `main`.
+- 💬 **Two-way chat & suggestions** — talk your project through; anything the model infers becomes a pending suggestion you approve (single or bulk).
+- 🎨 **Four themes** — `light`, `dark`, `midnight`, and `sand`, every surface driven by design tokens.
+
+## Architecture
+
+The frontend is "pixels + intent"; all privileged work — the filesystem, the GitHub network, spawning `claude` — happens in Rust behind named Tauri commands.
+
+```mermaid
+flowchart LR
+    subgraph FE["Frontend · React + TS + Tailwind (webview)"]
+        UI["Panes and nav"]
+        ZS["Zustand stores"]
+    end
+    subgraph BE["Backend · Rust (Tauri commands)"]
+        SQL[("SQLite")]
+        MP["ModelProvider"]
+        GHC["GitHub client"]
+    end
+    UI <--> ZS
+    ZS -->|"invoke()"| BE
+    MP -.->|"claude -p · read-only tools"| CC["Claude Code"]
+    GHC -.-> GH[("GitHub")]
+    BE --> SQL
 ```
-CLAUDE.md                      -> repo root (standing rules for Claude Code)
-.claude/
-  settings.json                -> PreToolUse hook registration
-  hooks/guard-commit.sh        -> blocks any git commit that stages a secret
-  commands/start-phase.md      -> /start-phase slash command
-scripts/
-  scan_secrets.py              -> deterministic secrets scanner (used by the hook)
-.planning/
-  PROPOSAL.md                  -> why this exists, success criteria
-  REQUIREMENTS.md              -> every decision from planning, structured
-  ARCHITECTURE.md              -> stack, data model, LLM + GitHub designs, enforcement
-  schema.sql                   -> tested SQLite schema (use as-is)
-  PLAN.md                      -> the plan index + phase status table
-  DECISIONS.md                 -> seeded ADR record
-  phases/phase-01..14-*.md     -> one file per phase (Claude loads only the current one)
-skills/                        -> install separately (see below); not part of the repo
-  big-picture/  (SKILL.md + scan.py)
-  phase-check/  (SKILL.md)
-  secrets-gate/ (SKILL.md + scan.py)
-```
 
-## Install
+## Tech stack
 
-1. Copy everything **except `skills/`** into the repo, preserving paths: `CLAUDE.md` at the root, and the `.claude/`, `scripts/`, and `.planning/` directories. Then `chmod +x .claude/hooks/guard-commit.sh scripts/scan_secrets.py`.
-2. Install the three skills where Claude Code finds them — globally at `~/.claude/skills/<name>/` (each with its `SKILL.md` and any `scan.py`), or per-repo at `.claude/skills/<name>/`. `chmod +x` the `scan.py` files.
-3. Requires `python3` on PATH (the hook and skills use it; pure standard library).
+| Layer | Choice |
+|---|---|
+| Shell | **Tauri 2** — one signed, notarized native `.app` |
+| Backend | **Rust** — owns SQLite, the GitHub client, the model layer, and every write/commit |
+| Frontend | **React 19 + TypeScript + Tailwind v4**, lightweight **Zustand** state |
+| Database | **embedded SQLite** via `rusqlite` (bundled — no system dependency) |
+| Model | **Claude Code** via `claude -p` (stream-json) behind a `ModelProvider` interface |
 
-## Kick off the build
+## Status & roadmap
 
-In Claude Code, in the repo:
+Built one phase at a time, each phase verified before the next begins. **Phase 1 — the project scaffold & app shell — is complete:** a themed, navigable shell (four themes), SQLite wired with idempotent migrations, and the hamburger nav with clean empty states.
 
-> Read `.planning/PLAN.md` and `CLAUDE.md`. Confirm the current state, then run `/start-phase 1` — one task at a time, stopping after each for me to review.
+<details>
+<summary><b>Full 14-phase roadmap</b></summary>
 
-`/start-phase` runs `phase-check` first (so finished phases are never rebuilt), then works one phase. The commit hook runs the secrets scan on every commit automatically. Run the `big-picture` skill anytime to score the repo.
+| # | Phase | Status |
+|---|-------|--------|
+| 1 | Project scaffold & app shell | ✅ Done |
+| 2 | Model provider & Claude availability | ⬜ Next |
+| 3 | Projects & GitHub connect | ⬜ |
+| 4 | Repo analysis & cold start | ⬜ |
+| 5 | Assessment engine & State pane | ⬜ |
+| 6 | The Understand hub | ⬜ |
+| 7 | Grill-me cards & detail coverage | ⬜ |
+| 8 | Two-way chat & structured proposals | ⬜ |
+| 9 | Decisions, suggestions & stack panes | ⬜ |
+| 10 | Feature inbox & plan regeneration | ⬜ |
+| 11 | GitHub sync out | ⬜ |
+| 12 | Visualization, first-run & polish | ⬜ |
+| 13 | Production hardening | ⬜ |
+| 14 | Coming-soon learning mode (stub) | ⬜ |
 
-## Pushing this to GitHub
+</details>
 
-I couldn't push for you — pushing to `hotredsam/Review-Helper` needs your GitHub credentials, which I don't have in this environment (I could read the public repo, but not write). The repo currently has just a README on `main`, so this drops in cleanly. From a machine that's authenticated to your GitHub:
+## Development
+
+Prerequisites: **Rust** (stable) and **Node 20+** on macOS, with the Xcode Command Line Tools (`xcode-select --install`).
 
 ```bash
-git clone https://github.com/hotredsam/Review-Helper.git
-cd Review-Helper
+npm install                                        # install frontend deps
+npm run tauri dev                                  # run the app (native window)
 
-# copy the package contents in (everything except skills/), preserving paths:
-#   CLAUDE.md, .claude/, scripts/, .planning/
-# (from wherever you unpacked this package)
-
-chmod +x .claude/hooks/guard-commit.sh scripts/scan_secrets.py
-
-git checkout -b planning          # optional: stage on a branch first
-git add -A
-git commit -m "Add planning package + build-time enforcement"
-git push -u origin planning       # open a PR, or push straight to main:
-# git checkout main && git merge planning && git push
+npm test                                           # frontend tests (Vitest + Testing Library)
+cargo test --manifest-path src-tauri/Cargo.toml    # Rust tests (DB layer, migrations, CRUD)
+npm run build                                       # production frontend build
 ```
 
-Then install the skills (step 2 above) and kick off the build.
+The first `cargo` build is slow — it compiles Tauri and SQLite from source; subsequent builds are incremental.
+
+---
+
+<div align="center">
+<sub><b>Review Helper</b> · vibecode the right way</sub>
+</div>
