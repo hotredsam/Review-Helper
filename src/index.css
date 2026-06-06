@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/*
+ * Phase 1 base styles. Deliberately palette-neutral: the four-theme token
+ * system (Task 2) introduces every color as a CSS variable via `@theme inline`,
+ * so nothing here hardcodes a color. Keep this file to structure + typography
+ * defaults only.
+ */
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+}
