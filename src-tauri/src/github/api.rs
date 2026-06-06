@@ -283,6 +283,138 @@ pub fn put_file(
     Ok(())
 }
 
+/// A GitHub issue (subset) for reconciliation.
+#[derive(Debug, Clone)]
+pub struct GhIssue {
+    pub number: u64,
+    pub title: String,
+    pub body: String,
+    pub state: String,
+    pub labels: Vec<String>,
+}
+
+/// List a repo's issues (open + closed), excluding pull requests.
+pub fn list_issues(owner: &str, repo: &str) -> Result<Vec<GhIssue>, String> {
+    let resp = req_get(format!("{API}/repos/{owner}/{repo}/issues?state=all&per_page=100"))?;
+    if !resp.status().is_success() {
+        return Err(status_error(resp.status()));
+    }
+    let arr: Vec<serde_json::Value> = resp.json().map_err(|e| e.to_string())?;
+    Ok(arr
+        .into_iter()
+        .filter(|v| v.get("pull_request").is_none()) // the issues endpoint includes PRs
+        .filter_map(|v| {
+            Some(GhIssue {
+                number: v.get("number")?.as_u64()?,
+                title: v.get("title").and_then(serde_json::Value::as_str).unwrap_or("").to_string(),
+                body: v.get("body").and_then(serde_json::Value::as_str).unwrap_or("").to_string(),
+                state: v.get("state").and_then(serde_json::Value::as_str).unwrap_or("open").to_string(),
+                labels: v
+                    .get("labels")
+                    .and_then(serde_json::Value::as_array)
+                    .map(|ls| ls.iter().filter_map(|l| l.get("name").and_then(serde_json::Value::as_str).map(String::from)).collect())
+                    .unwrap_or_default(),
+            })
+        })
+        .collect())
+}
+
+/// Create an issue. Returns its number.
+pub fn create_issue(owner: &str, repo: &str, title: &str, body: &str, labels: &[&str]) -> Result<u64, String> {
+    let resp = http_client()?
+        .post(format!("{API}/repos/{owner}/{repo}/issues"))
+        .bearer_auth(token()?)
+        .header("Accept", ACCEPT)
+        .header("X-GitHub-Api-Version", API_VERSION)
+        .json(&serde_json::json!({ "title": title, "body": body, "labels": labels }))
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(status_error(resp.status()));
+    }
+    let v: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
+    v.get("number").and_then(serde_json::Value::as_u64).ok_or_else(|| "Issue created but no number returned.".into())
+}
+
+/// Update an issue's title/body/state/labels (PATCH).
+pub fn update_issue(
+    owner: &str,
+    repo: &str,
+    number: u64,
+    title: &str,
+    body: &str,
+    state: &str,
+    labels: &[&str],
+) -> Result<(), String> {
+    let resp = http_client()?
+        .patch(format!("{API}/repos/{owner}/{repo}/issues/{number}"))
+        .bearer_auth(token()?)
+        .header("Accept", ACCEPT)
+        .header("X-GitHub-Api-Version", API_VERSION)
+        .json(&serde_json::json!({ "title": title, "body": body, "state": state, "labels": labels }))
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(status_error(resp.status()));
+    }
+    Ok(())
+}
+
+/// Close an issue without touching its title/body (state only).
+pub fn close_issue(owner: &str, repo: &str, number: u64) -> Result<(), String> {
+    let resp = http_client()?
+        .patch(format!("{API}/repos/{owner}/{repo}/issues/{number}"))
+        .bearer_auth(token()?)
+        .header("Accept", ACCEPT)
+        .header("X-GitHub-Api-Version", API_VERSION)
+        .json(&serde_json::json!({ "state": "closed" }))
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(status_error(resp.status()));
+    }
+    Ok(())
+}
+
+/// List a directory's files on a branch: (path, blob sha). Empty if the dir
+/// doesn't exist.
+pub fn list_dir(owner: &str, repo: &str, path: &str, branch: &str) -> Result<Vec<(String, String)>, String> {
+    let resp = req_get(format!("{API}/repos/{owner}/{repo}/contents/{path}?ref={branch}"))?;
+    if resp.status().as_u16() == 404 {
+        return Ok(vec![]);
+    }
+    if !resp.status().is_success() {
+        return Err(status_error(resp.status()));
+    }
+    let arr: Vec<serde_json::Value> = resp.json().map_err(|e| e.to_string())?;
+    Ok(arr
+        .into_iter()
+        .filter(|v| v.get("type").and_then(serde_json::Value::as_str) == Some("file"))
+        .filter_map(|v| {
+            Some((
+                v.get("path")?.as_str()?.to_string(),
+                v.get("sha")?.as_str()?.to_string(),
+            ))
+        })
+        .collect())
+}
+
+/// Delete a file on a branch (Contents API DELETE).
+pub fn delete_file(owner: &str, repo: &str, path: &str, sha: &str, message: &str, branch: &str) -> Result<(), String> {
+    let resp = http_client()?
+        .delete(format!("{API}/repos/{owner}/{repo}/contents/{path}"))
+        .bearer_auth(token()?)
+        .header("Accept", ACCEPT)
+        .header("X-GitHub-Api-Version", API_VERSION)
+        .json(&serde_json::json!({ "message": message, "sha": sha, "branch": branch }))
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(status_error(resp.status()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Loader2, Play, Sparkles, AlertTriangle } from "lucide-react";
 import { usePlanStore, ensureAnalysisListener } from "../store/planStore";
 import { WhyExplain } from "./WhyExplain";
+import { SyncPanel } from "./SyncPanel";
 import type { Project } from "../api/projects";
 
 /**
@@ -253,6 +254,8 @@ export function PlanPane({ project }: { project: Project }) {
           </ul>
         </section>
       )}
+
+      <SyncPanel project={project} />
     </div>
   );
 }

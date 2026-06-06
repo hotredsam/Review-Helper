@@ -3,12 +3,14 @@
 //! and the per-phase issues behind a confirmed preview (idempotent). T1 is the
 //! pure package renderer; T2–T4 add the GitHub writes.
 
-use rusqlite::Connection;
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 
 pub mod commands;
+pub mod issues;
 
 use crate::plan::store::{get_plan, PhaseView, PlanView};
+use issues::{reconcile, IssueAction, IssueRef, PhasePlan};
 
 /// One file in the planning package: a repo-relative path + its full contents.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -146,31 +148,156 @@ pub fn parse_owner_repo(url: &str) -> Option<(String, String)> {
     (!owner.is_empty() && !repo.is_empty()).then_some((owner, repo))
 }
 
-/// Push the planning package to the `planning` branch (created from the default
-/// branch head if missing). Idempotent: existing files are updated in place.
-pub fn push_planning_branch(conn: &Connection, project_id: i64) -> Result<usize, String> {
+fn owner_repo(conn: &Connection, project_id: i64) -> Result<(String, String, String), String> {
     let project = crate::projects::get(conn, project_id)?.ok_or("Project not found.")?;
     let url = project.github_repo_url.ok_or("Connect a GitHub repo first.")?;
     let (owner, repo) = parse_owner_repo(&url).ok_or("Couldn't parse the repo from its URL.")?;
     let default_branch = project.default_branch.unwrap_or_else(|| "main".into());
+    Ok((owner, repo, default_branch))
+}
+
+/// Write the package files to a branch (idempotent — update in place by sha).
+fn push_files(owner: &str, repo: &str, branch: &str, files: &[PackageFile]) -> Result<(), String> {
+    for f in files {
+        let sha = crate::github::api::file_sha(owner, repo, &f.path, branch)?;
+        crate::github::api::put_file(
+            owner,
+            repo,
+            &f.path,
+            &f.content,
+            &format!("Review Helper: sync {}", f.path),
+            branch,
+            sha.as_deref(),
+        )?;
+    }
+    Ok(())
+}
+
+/// Push the planning package to the `planning` branch (created from the default
+/// branch head if missing). Idempotent.
+pub fn push_planning_branch(conn: &Connection, project_id: i64) -> Result<usize, String> {
+    let (owner, repo, default_branch) = owner_repo(conn, project_id)?;
     let files = package(conn, project_id)?;
     if files.is_empty() {
         return Err("No plan to sync yet — analyze or kick off a plan first.".into());
     }
-
     let head = crate::github::api::branch_head_sha(&owner, &repo, &default_branch)?;
     crate::github::api::ensure_branch(&owner, &repo, "planning", &head)?;
-    for f in &files {
-        let sha = crate::github::api::file_sha(&owner, &repo, &f.path, "planning")?;
-        crate::github::api::put_file(
-            &owner,
-            &repo,
-            &f.path,
-            &f.content,
-            &format!("Review Helper: sync {}", f.path),
-            "planning",
-            sha.as_deref(),
-        )?;
+    push_files(&owner, &repo, "planning", &files)?;
+    Ok(files.len())
+}
+
+/// The phases of the latest plan version as PhasePlans (for issue sync).
+fn phase_plans(conn: &Connection, project_id: i64) -> Result<Vec<PhasePlan>, String> {
+    let version: Option<i64> = conn
+        .query_row("SELECT MAX(version) FROM plans WHERE project_id = ?1", [project_id], |r| r.get(0))
+        .optional()
+        .map_err(|e| e.to_string())?
+        .flatten();
+    let Some(version) = version else { return Ok(vec![]) };
+    let rows: Vec<(i64, String, String, Option<String>, String)> = {
+        let mut stmt = conn
+            .prepare("SELECT id, marker, title, goal, status FROM phases WHERE project_id = ?1 AND plan_version = ?2 ORDER BY idx")
+            .map_err(|e| e.to_string())?;
+        stmt.query_map(params![project_id, version], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+        })
+        .and_then(Iterator::collect)
+        .map_err(|e| e.to_string())?
+    };
+    let mut out = Vec::new();
+    for (id, marker, title, goal, status) in rows {
+        let mut ts = conn
+            .prepare("SELECT title, status FROM tasks WHERE phase_id = ?1 ORDER BY idx")
+            .map_err(|e| e.to_string())?;
+        let tasks: Vec<(String, String)> = ts
+            .query_map([id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .and_then(Iterator::collect)
+            .map_err(|e| e.to_string())?;
+        out.push(PhasePlan { marker, title, goal, status, tasks });
+    }
+    Ok(out)
+}
+
+/// Preview the issue reconciliation (read-only — lists issues + computes actions).
+pub fn preview_issue_sync(conn: &Connection, project_id: i64) -> Result<Vec<IssueAction>, String> {
+    let (owner, repo, _) = owner_repo(conn, project_id)?;
+    let existing: Vec<IssueRef> = crate::github::api::list_issues(&owner, &repo)?
+        .into_iter()
+        .map(|g| IssueRef { number: g.number, title: g.title, body: g.body, state: g.state, labels: g.labels })
+        .collect();
+    Ok(reconcile(&existing, &phase_plans(conn, project_id)?))
+}
+
+/// Apply the issue reconciliation (re-derived for freshness). Records each
+/// phase's issue number back into the DB so re-syncs match without duplicates.
+pub fn apply_issue_sync(conn: &Connection, project_id: i64) -> Result<usize, String> {
+    let (owner, repo, _) = owner_repo(conn, project_id)?;
+    let version: Option<i64> = conn
+        .query_row("SELECT MAX(version) FROM plans WHERE project_id = ?1", [project_id], |r| r.get(0))
+        .optional()
+        .map_err(|e| e.to_string())?
+        .flatten();
+    let actions = preview_issue_sync(conn, project_id)?;
+    let mut n = 0;
+    for a in &actions {
+        match a {
+            IssueAction::Create { marker, title, body, state, label } => {
+                let num = crate::github::api::create_issue(&owner, &repo, title, body, &[label.as_str()])?;
+                if state == "closed" {
+                    crate::github::api::close_issue(&owner, &repo, num)?;
+                }
+                record_issue_number(conn, project_id, version, marker, num)?;
+                n += 1;
+            }
+            IssueAction::Update { number, marker, title, body, state, label } => {
+                crate::github::api::update_issue(&owner, &repo, *number, title, body, state, &[label.as_str()])?;
+                record_issue_number(conn, project_id, version, marker, *number)?;
+                n += 1;
+            }
+            IssueAction::Close { number, .. } => {
+                crate::github::api::close_issue(&owner, &repo, *number)?;
+                n += 1;
+            }
+        }
+    }
+    Ok(n)
+}
+
+fn record_issue_number(conn: &Connection, project_id: i64, version: Option<i64>, marker: &str, number: u64) -> Result<(), String> {
+    if let Some(v) = version {
+        conn.execute(
+            "UPDATE phases SET github_issue_number = ?1 WHERE project_id = ?2 AND plan_version = ?3 AND marker = ?4",
+            params![number as i64, project_id, v, marker],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Push the package to the default branch and prune stale phase docs that the
+/// current plan no longer includes (legacy removal — caller gates on confirm).
+pub fn push_main(conn: &Connection, project_id: i64) -> Result<usize, String> {
+    let (owner, repo, default_branch) = owner_repo(conn, project_id)?;
+    let files = package(conn, project_id)?;
+    if files.is_empty() {
+        return Err("No plan to sync yet — analyze or kick off a plan first.".into());
+    }
+    push_files(&owner, &repo, &default_branch, &files)?;
+
+    // Prune stale .planning/phases/*.md no longer in the package.
+    let keep: std::collections::HashSet<&str> = files.iter().map(|f| f.path.as_str()).collect();
+    for (path, sha) in crate::github::api::list_dir(&owner, &repo, ".planning/phases", &default_branch)? {
+        if !keep.contains(path.as_str()) {
+            crate::github::api::delete_file(
+                &owner,
+                &repo,
+                &path,
+                &sha,
+                &format!("Review Helper: remove stale {path}"),
+                &default_branch,
+            )?;
+        }
     }
     Ok(files.len())
 }
