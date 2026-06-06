@@ -2,13 +2,40 @@
 //! stray prose / code fences via a string-aware brace-balancing extractor; a
 //! missing required field is a hard error (we never fabricate or default it).
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+
+/// Accept a JSON string OR an array/number/bool/null and coerce to a string.
+/// Models occasionally return a prose field as a list of bullets; we join them
+/// rather than fail (and never fabricate content).
+fn flexible_string<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    let v = serde_json::Value::deserialize(d)?;
+    Ok(value_to_string(&v))
+}
+
+fn value_to_string(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(a) => a
+            .iter()
+            .map(value_to_string)
+            .collect::<Vec<_>>()
+            .join("\n"),
+        serde_json::Value::Null => String::new(),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::Object(_) => v.to_string(),
+    }
+}
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct GeneratedPlan {
+    #[serde(deserialize_with = "flexible_string")]
     pub current_state: String,
+    #[serde(deserialize_with = "flexible_string")]
     pub body_md: String,
+    #[serde(deserialize_with = "flexible_string")]
     pub confidence: String,
+    #[serde(deserialize_with = "flexible_string")]
     pub notes: String,
     pub phases: Vec<GenPhase>,
     pub decisions: Vec<GenDecision>,
@@ -17,24 +44,34 @@ pub struct GeneratedPlan {
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct GenPhase {
+    #[serde(deserialize_with = "flexible_string")]
     pub title: String,
+    #[serde(deserialize_with = "flexible_string")]
     pub goal: String,
     pub tasks: Vec<GenTask>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct GenTask {
+    #[serde(deserialize_with = "flexible_string")]
     pub title: String,
+    #[serde(deserialize_with = "flexible_string")]
     pub body: String,
+    #[serde(deserialize_with = "flexible_string")]
     pub verification: String,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct GenDecision {
+    #[serde(deserialize_with = "flexible_string")]
     pub topic: String,
+    #[serde(deserialize_with = "flexible_string")]
     pub choice: String,
+    #[serde(deserialize_with = "flexible_string")]
     pub rationale: String,
+    #[serde(deserialize_with = "flexible_string")]
     pub alternatives: String,
+    #[serde(deserialize_with = "flexible_string")]
     pub consequences: String,
 }
 
@@ -128,6 +165,22 @@ mod tests {
         let wrapped = format!("Here is the plan:\n```json\n{VALID}\n```\nDone.");
         let plan = parse_plan(&wrapped).unwrap();
         assert_eq!(plan.phases.len(), 1);
+    }
+
+    #[test]
+    fn coerces_array_prose_fields_to_strings() {
+        let json = r#"{
+          "current_state": ["line one", "line two"],
+          "body_md": "ok",
+          "confidence": "low",
+          "notes": [],
+          "phases": [],
+          "decisions": [],
+          "stack": {"frontend": null, "backend": null, "database": null, "deployment": null, "pipes": null}
+        }"#;
+        let plan = parse_plan(json).unwrap();
+        assert_eq!(plan.current_state, "line one\nline two");
+        assert_eq!(plan.notes, "");
     }
 
     #[test]

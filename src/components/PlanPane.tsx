@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Loader2, Play, Sparkles, AlertTriangle } from "lucide-react";
 import { usePlanStore, ensureAnalysisListener } from "../store/planStore";
 import type { Project } from "../api/projects";
@@ -15,6 +15,8 @@ export function PlanPane({ project }: { project: Project }) {
   const error = usePlanStore((s) => s.error[project.id]);
   const loadPlan = usePlanStore((s) => s.loadPlan);
   const analyze = usePlanStore((s) => s.analyze);
+  const kickoff = usePlanStore((s) => s.kickoff);
+  const [desc, setDesc] = useState("");
 
   useEffect(() => {
     ensureAnalysisListener();
@@ -84,12 +86,35 @@ export function PlanPane({ project }: { project: Project }) {
       );
     }
     return (
-      <Center>
-        <p className="max-w-sm text-sm text-fg-muted">
-          This is a blank project — describe what you're building on the Overview pane to get a
-          starting plan.
-        </p>
-      </Center>
+      <div className="mx-auto max-w-xl space-y-3 p-8">
+        <div>
+          <h2 className="text-sm font-semibold text-fg">What are you building?</h2>
+          <p className="text-sm text-fg-muted">
+            Describe your project in a few sentences. Review Helper drafts an honest starting plan
+            from your description.
+          </p>
+        </div>
+        <textarea
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
+          rows={5}
+          placeholder="e.g. A macOS menu-bar app that tracks how long I spend in each app and shows a weekly chart…"
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/40"
+        />
+        <button
+          type="button"
+          disabled={!desc.trim()}
+          onClick={() => void kickoff(project.id, desc)}
+          className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+        >
+          <Sparkles className="h-4 w-4" /> Generate starting plan
+        </button>
+        {error && (
+          <p className="text-sm text-danger" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
     );
   }
 

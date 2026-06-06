@@ -49,6 +49,11 @@ describe("planStore", () => {
     await vi.waitFor(() => expect(usePlanStore.getState().plans[2]?.version).toBe(1));
   });
 
+  it("kickoff marks the project running", async () => {
+    await usePlanStore.getState().kickoff(5, "A markdown note CLI");
+    expect(usePlanStore.getState().analysis[5]).toBe("running");
+  });
+
   it("a failed event surfaces the error", () => {
     ensureAnalysisListener();
     ctrl.handler!({ type: "failed", project_id: 3, detail: "invalid plan json" });

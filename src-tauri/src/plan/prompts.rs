@@ -61,9 +61,7 @@ Small phases — each a coherent shippable increment with a clear goal. For a br
 
 Emit ONLY the JSON object — no prose before or after, no ``` fences. First character `{`, last `}`. Valid, parseable JSON, SAME schema and field names as repo-analysis mode (current_state, body_md, confidence, notes, phases[title,goal,tasks[title,body,verification]], decisions[topic,choice,rationale,alternatives,consequences], stack{frontend,backend,database,deployment,pipes}). Here `current_state` describes the STARTING POINT: a new project planned purely from the user's description (restate the described goal in a sentence or two)."#;
 
-/// Build the blank-kickoff user message from the user's description. Wired into
-/// the blank-project command in T3.
-#[allow(dead_code)]
+/// Build the blank-kickoff user message from the user's description.
 pub fn kickoff_user(description: &str) -> String {
     format!(
         "Here is what I'm building, in my own words:\n\n<description>\n{}\n</description>\n\n\

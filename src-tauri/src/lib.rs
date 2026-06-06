@@ -55,6 +55,7 @@ pub fn run() {
             github::commands::project_create_repo,
             github::commands::project_clone,
             plan::commands::analyze_project,
+            plan::commands::kickoff_project,
             plan::commands::get_plan,
             projects::create_project,
             projects::list_projects,
