@@ -7,6 +7,7 @@ mod cards;
 pub mod context;
 mod db;
 mod github;
+mod grill;
 pub mod model;
 mod plan;
 mod projects;
@@ -69,6 +70,8 @@ pub fn run() {
             cards::commands::card_get,
             cards::commands::card_explain,
             cards::commands::card_capture,
+            grill::commands::grill_generate,
+            grill::commands::grill_list,
             projects::create_project,
             projects::list_projects,
             projects::get_project,

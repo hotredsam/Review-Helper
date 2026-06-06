@@ -5,6 +5,7 @@ import { RepoCache } from "./RepoCache";
 import { PlanPane } from "./PlanPane";
 import { StatePane } from "./StatePane";
 import { UnderstandHub } from "./UnderstandHub";
+import { GrillPane } from "./GrillPane";
 import { sectionById } from "../nav/sections";
 import { useUiStore } from "../store/uiStore";
 import { useProjectStore } from "../store/projectStore";
@@ -61,6 +62,8 @@ export function MainPane({ onNewProject }: Props) {
           <StatePane project={active} />
         ) : section.id === "understand" && active ? (
           <UnderstandHub />
+        ) : section.id === "grill" && active ? (
+          <GrillPane project={active} />
         ) : section.id === "plan" && active ? (
           <PlanPane project={active} />
         ) : (
