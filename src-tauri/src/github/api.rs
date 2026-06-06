@@ -175,9 +175,126 @@ pub fn create_repo_with(token: &str, name: &str, private: bool) -> Result<RepoSu
     Ok(repo.into())
 }
 
+// ---- Write primitives for sync-out (Phase 11) ----
+
+/// Standard base64 (RFC 4648) — the Contents API wants base64 content, and a
+/// 15-line encoder beats pulling in a dependency for it.
+pub(crate) fn b64encode(input: &[u8]) -> String {
+    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = *chunk.get(1).unwrap_or(&0) as u32;
+        let b2 = *chunk.get(2).unwrap_or(&0) as u32;
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(T[((n >> 18) & 63) as usize] as char);
+        out.push(T[((n >> 12) & 63) as usize] as char);
+        out.push(if chunk.len() > 1 { T[((n >> 6) & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 2 { T[(n & 63) as usize] as char } else { '=' });
+    }
+    out
+}
+
+fn req_get(url: String) -> Result<reqwest::blocking::Response, String> {
+    http_client()?
+        .get(url)
+        .bearer_auth(token()?)
+        .header("Accept", ACCEPT)
+        .header("X-GitHub-Api-Version", API_VERSION)
+        .send()
+        .map_err(|e| e.to_string())
+}
+
+/// The HEAD commit sha of a branch.
+pub fn branch_head_sha(owner: &str, repo: &str, branch: &str) -> Result<String, String> {
+    let resp = req_get(format!("{API}/repos/{owner}/{repo}/git/ref/heads/{branch}"))?;
+    if !resp.status().is_success() {
+        return Err(status_error(resp.status()));
+    }
+    let v: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
+    v.get("object")
+        .and_then(|o| o.get("sha"))
+        .and_then(serde_json::Value::as_str)
+        .map(String::from)
+        .ok_or_else(|| "Could not read the branch head.".into())
+}
+
+/// Create a branch ref at `from_sha` if it doesn't already exist (idempotent).
+pub fn ensure_branch(owner: &str, repo: &str, branch: &str, from_sha: &str) -> Result<(), String> {
+    let resp = http_client()?
+        .post(format!("{API}/repos/{owner}/{repo}/git/refs"))
+        .bearer_auth(token()?)
+        .header("Accept", ACCEPT)
+        .header("X-GitHub-Api-Version", API_VERSION)
+        .json(&serde_json::json!({ "ref": format!("refs/heads/{branch}"), "sha": from_sha }))
+        .send()
+        .map_err(|e| e.to_string())?;
+    // 201 created, 422 already exists — both fine.
+    if resp.status().is_success() || resp.status().as_u16() == 422 {
+        Ok(())
+    } else {
+        Err(status_error(resp.status()))
+    }
+}
+
+/// The blob sha of a file on a branch, or None if it doesn't exist.
+pub fn file_sha(owner: &str, repo: &str, path: &str, branch: &str) -> Result<Option<String>, String> {
+    let resp = req_get(format!("{API}/repos/{owner}/{repo}/contents/{path}?ref={branch}"))?;
+    if resp.status().as_u16() == 404 {
+        return Ok(None);
+    }
+    if !resp.status().is_success() {
+        return Err(status_error(resp.status()));
+    }
+    let v: serde_json::Value = resp.json().map_err(|e| e.to_string())?;
+    Ok(v.get("sha").and_then(serde_json::Value::as_str).map(String::from))
+}
+
+/// Create or update a file on a branch (Contents API). `sha` is required to
+/// update an existing file.
+pub fn put_file(
+    owner: &str,
+    repo: &str,
+    path: &str,
+    content: &str,
+    message: &str,
+    branch: &str,
+    sha: Option<&str>,
+) -> Result<(), String> {
+    let mut body = serde_json::json!({
+        "message": message,
+        "content": b64encode(content.as_bytes()),
+        "branch": branch,
+    });
+    if let Some(s) = sha {
+        body["sha"] = serde_json::json!(s);
+    }
+    let resp = http_client()?
+        .put(format!("{API}/repos/{owner}/{repo}/contents/{path}"))
+        .bearer_auth(token()?)
+        .header("Accept", ACCEPT)
+        .header("X-GitHub-Api-Version", API_VERSION)
+        .json(&body)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(status_error(resp.status()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn b64encode_matches_rfc4648() {
+        assert_eq!(b64encode(b""), "");
+        assert_eq!(b64encode(b"f"), "Zg==");
+        assert_eq!(b64encode(b"fo"), "Zm8=");
+        assert_eq!(b64encode(b"foo"), "Zm9v");
+        assert_eq!(b64encode(b"hello"), "aGVsbG8=");
+    }
 
     fn gh_token() -> Option<String> {
         let out = std::process::Command::new("gh")

@@ -76,6 +76,7 @@ pub fn run() {
             plan::commands::get_plan,
             audit::commands::audit_list,
             sync::commands::sync_package,
+            sync::commands::sync_push_planning,
             assess::commands::assess_project,
             assess::commands::get_assessment,
             cards::commands::cards_list,
