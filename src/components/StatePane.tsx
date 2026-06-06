@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { Loader2, Gauge, AlertTriangle } from "lucide-react";
 import { useAssessStore, ensureAssessListener } from "../store/assessStore";
+import { RadarChart, Gauge as ScoreGauge } from "./charts";
 import type { DimScore } from "../api/assessment";
 import type { Project } from "../api/projects";
 
@@ -92,18 +93,26 @@ export function StatePane({ project }: { project: Project }) {
     );
   }
 
-  const overallTint = tint(assessment.overall);
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Overall</p>
-          <p className={"text-4xl font-bold " + overallTint.text}>{assessment.overall}</p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-32 shrink-0">
+            <ScoreGauge value={assessment.overall} label="Overall" />
+          </div>
+          <RadarChart
+            axes={DIMENSIONS.map(([key, label]) => ({
+              label,
+              value: assessment.dimensions?.[key]?.score ?? 0,
+            }))}
+            size={150}
+            showLabels={false}
+          />
         </div>
         <button
           type="button"
           onClick={() => void assess(project.id)}
-          className="rounded-md border border-border px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-2"
+          className="shrink-0 self-start rounded-md border border-border px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-2"
         >
           Re-assess
         </button>
