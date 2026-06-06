@@ -2,9 +2,10 @@
 //! CSS-var-backed tokens (no hardcoded colors), so they work in all four themes.
 //! No runtime LLM-generated UI.
 
-/** Score → semantic color token. */
+/** Score → semantic color token. 75/50 breakpoints match StatePane's `tint`
+ *  so the same score never reads as two different colors across the app. */
 function tintText(v: number): string {
-  return v >= 67 ? "text-success" : v >= 34 ? "text-warning" : "text-danger";
+  return v >= 75 ? "text-success" : v >= 50 ? "text-warning" : "text-danger";
 }
 
 const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
@@ -15,14 +16,16 @@ export function RadarChart({
   axes,
   size = 220,
   showLabels = true,
+  ariaLabel,
 }: {
   axes: { label: string; value: number }[];
   size?: number;
   showLabels?: boolean;
+  ariaLabel?: string;
 }) {
   const cx = size / 2;
   const cy = size / 2;
-  const r = size / 2 - 34;
+  const r = Math.max(1, size / 2 - 34);
   const n = Math.max(axes.length, 1);
   const pt = (i: number, frac: number): [number, number] => {
     const ang = -Math.PI / 2 + (i * 2 * Math.PI) / n;
@@ -32,7 +35,7 @@ export function RadarChart({
   const data = axes.map((a, i) => pt(i, clamp(a.value) / 100).join(",")).join(" ");
 
   return (
-    <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Dimension scores" className="text-accent">
+    <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={ariaLabel ?? "Dimension scores"} className="text-accent">
       {[0.25, 0.5, 0.75, 1].map((f, i) => (
         <polygon key={i} points={ring(f)} className="fill-none stroke-border" strokeWidth={1} />
       ))}
@@ -60,8 +63,9 @@ export function Gauge({ value, label, size = 132 }: { value: number; label: stri
   const v = Math.round(clamp(value));
   const cx = size / 2;
   const cy = size / 2;
-  const r = size / 2 - 12;
-  const arc = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
+  const r = Math.max(1, size / 2 - 12);
+  // sweep flag 0 → the arc bulges UP (y < cy), fitting the half-height viewBox.
+  const arc = `M ${cx - r} ${cy} A ${r} ${r} 0 0 0 ${cx + r} ${cy}`;
   const circ = Math.PI * r;
   return (
     <svg viewBox={`0 0 ${size} ${size / 2 + 22}`} role="img" aria-label={`${label}: ${v} of 100`} className={tintText(v)}>
@@ -86,7 +90,7 @@ export function Gauge({ value, label, size = 132 }: { value: number; label: stri
 
 /** Labeled horizontal progress bar. */
 export function ProgressBar({ value, max = 100, label }: { value: number; max?: number; label: string }) {
-  const pct = max > 0 ? Math.round(clamp((value / max) * 100) ) : 0;
+  const pct = max > 0 && Number.isFinite(value) ? Math.round(clamp((value / max) * 100)) : 0;
   return (
     <div>
       <div className="mb-0.5 flex justify-between text-xs text-fg-subtle">
@@ -111,10 +115,10 @@ export function ProgressBar({ value, max = 100, label }: { value: number; max?: 
 
 /** Donut ring showing value/max as a percentage. */
 export function Donut({ value, max, label, size = 104 }: { value: number; max: number; label: string; size?: number }) {
-  const frac = max > 0 ? clamp(value / max, 0, 1) : 0;
+  const frac = max > 0 && Number.isFinite(value) ? clamp(value / max, 0, 1) : 0;
   const cx = size / 2;
   const cy = size / 2;
-  const r = size / 2 - 9;
+  const r = Math.max(1, size / 2 - 9);
   const circ = 2 * Math.PI * r;
   return (
     <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${label}: ${value} of ${max}`} className="text-accent">

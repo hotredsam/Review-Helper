@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, ArrowRight, ArrowLeft } from "lucide-react";
 
 export interface TourStep {
@@ -55,16 +55,29 @@ export function Tour({ onClose }: { onClose: () => void }) {
     markTourSeen();
     onClose();
   };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Welcome tour"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim p-4"
+      onClick={close}
+      role="presentation"
     >
-      <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-xl">
+      <div
+        className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Welcome tour"
+      >
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs text-fg-subtle">
+          <span className="text-xs text-fg-subtle" aria-live="polite">
             Step {i + 1} of {TOUR_STEPS.length}
           </span>
           <button type="button" onClick={close} aria-label="Skip tour" className="text-fg-subtle hover:text-fg">

@@ -29,7 +29,7 @@ export function SettingsView() {
         <button
           type="button"
           onClick={() => setTourOpen(true)}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
+          className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover"
         >
           Take the tour
         </button>

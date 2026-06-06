@@ -108,6 +108,10 @@ export function StatePane({ project }: { project: Project }) {
             }))}
             size={150}
             showLabels={false}
+            ariaLabel={
+              "Dimension scores — " +
+              DIMENSIONS.map(([key, label]) => `${label} ${assessment.dimensions?.[key]?.score ?? 0}`).join(", ")
+            }
           />
         </div>
         <button

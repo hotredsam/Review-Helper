@@ -23,6 +23,8 @@ describe("charts (theme-token, data-driven, no hardcoded colors)", () => {
     const svg = container.querySelector("svg")!;
     expect(svg.getAttribute("aria-label")).toBe("Overall: 100 of 100"); // clamped
     expect(svg.classList.contains("text-success")).toBe(true); // high score -> success token
+    // Arc uses sweep flag 0 so it bulges UP and fits the half-height viewBox.
+    expect(container.querySelector("path")!.getAttribute("d")).toContain(" 0 0 0 ");
   });
 
   it("ProgressBar exposes an accessible progressbar with the right value", () => {
