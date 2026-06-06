@@ -57,6 +57,22 @@ export function updateProject(id: number): Promise<void> {
   return invoke("update_plan", { projectId: id });
 }
 
+export interface AuditEntry {
+  version: number;
+  source: string;
+  at: string;
+}
+
+/** Rebuild the plan from scratch (warned in the UI; no status carry-over). */
+export function rebuildProject(id: number): Promise<void> {
+  return invoke("rebuild_plan", { projectId: id });
+}
+
+/** The plan audit trail: source → version mapping. */
+export function auditList(id: number): Promise<AuditEntry[]> {
+  return invoke<AuditEntry[]>("audit_list", { projectId: id });
+}
+
 export function getPlan(id: number): Promise<PlanView | null> {
   return invoke<PlanView | null>("get_plan", { projectId: id });
 }

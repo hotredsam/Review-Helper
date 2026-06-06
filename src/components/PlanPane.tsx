@@ -20,6 +20,10 @@ export function PlanPane({ project }: { project: Project }) {
   const analyze = usePlanStore((s) => s.analyze);
   const kickoff = usePlanStore((s) => s.kickoff);
   const update = usePlanStore((s) => s.update);
+  const rebuild = usePlanStore((s) => s.rebuild);
+  const loadAudit = usePlanStore((s) => s.loadAudit);
+  const auditRaw = usePlanStore((s) => s.audit[project.id]);
+  const audit = auditRaw ?? [];
   const [desc, setDesc] = useState("");
 
   useEffect(() => {
@@ -28,6 +32,19 @@ export function PlanPane({ project }: { project: Project }) {
   useEffect(() => {
     if (plan === undefined) void loadPlan(project.id);
   }, [project.id, plan, loadPlan]);
+  useEffect(() => {
+    void loadAudit(project.id);
+  }, [project.id, loadAudit]);
+
+  const onRebuild = () => {
+    if (
+      window.confirm(
+        "Rebuild regenerates the plan from scratch and does NOT carry over your phase completion. Use “Update plan” to weave in changes while keeping progress. Rebuild anyway?",
+      )
+    ) {
+      void rebuild(project.id);
+    }
+  };
 
   const cloned = !!project.clone_path;
   const linked = !!project.github_repo_url;
@@ -211,7 +228,31 @@ export function PlanPane({ project }: { project: Project }) {
             Re-analyze
           </button>
         )}
+        <button
+          type="button"
+          onClick={onRebuild}
+          className="rounded-md border border-danger/40 px-3 py-1.5 text-xs text-danger hover:bg-danger/10"
+        >
+          Rebuild plan
+        </button>
       </div>
+
+      {audit.length > 0 && (
+        <section className="space-y-1 pt-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">History</h2>
+          <ul className="space-y-0.5">
+            {audit
+              .slice()
+              .reverse()
+              .map((e, i) => (
+                <li key={i} className="text-xs text-fg-subtle">
+                  <span className="font-medium text-fg-muted">v{e.version}</span> ← {e.source}
+                  <span className="ml-2">{e.at}</span>
+                </li>
+              ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

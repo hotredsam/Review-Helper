@@ -1,7 +1,7 @@
 //! Plan commands: analyze a clone (read-only) or kick off a blank project from a
 //! description, both into a first persisted plan with streamed progress.
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -57,7 +57,7 @@ pub fn analyze_project(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Re
     req.cwd = Some(clone_path);
 
     let app = app.clone();
-    std::thread::spawn(move || generate_plan(app, project_id, req));
+    std::thread::spawn(move || generate_plan(app, project_id, req, "analyze"));
     Ok(())
 }
 
@@ -84,7 +84,7 @@ pub fn kickoff_project(
     // No cwd: there is no repo to read.
 
     let app = app.clone();
-    std::thread::spawn(move || generate_plan(app, project_id, req));
+    std::thread::spawn(move || generate_plan(app, project_id, req, "kickoff"));
     Ok(())
 }
 
@@ -107,7 +107,7 @@ fn store_kickoff_answer(conn: &Connection, project_id: i64, description: &str) -
 
 /// Run a plan-generation request to completion: stream progress, parse the
 /// result, and persist it. Shared by analyze + kickoff.
-fn generate_plan(app: AppHandle, project_id: i64, req: ModelRequest) {
+fn generate_plan(app: AppHandle, project_id: i64, req: ModelRequest, source: &str) {
     let emit = |ev: AnalysisEvent| {
         let _ = app.emit("analysis-event", &ev);
     };
@@ -151,7 +151,13 @@ fn generate_plan(app: AppHandle, project_id: i64, req: ModelRequest) {
 
     let db = app.state::<Db>();
     let saved = match db.0.lock() {
-        Ok(mut conn) => store::save_generated_plan(&mut conn, project_id, &plan),
+        Ok(mut conn) => {
+            let v = store::save_generated_plan(&mut conn, project_id, &plan);
+            if let Ok(version) = &v {
+                let _ = crate::audit::record(&conn, project_id, *version, source);
+            }
+            v
+        }
         Err(e) => Err(e.to_string()),
     };
     match saved {
@@ -256,6 +262,7 @@ fn run_merge(app: AppHandle, project_id: i64, req: ModelRequest, feature_ids: Ve
                     for fid in &feature_ids {
                         let _ = crate::features::set_status(&conn, project_id, *fid, "in_plan");
                     }
+                    let _ = crate::audit::record(&conn, project_id, version, "update");
                     Ok(version)
                 }
                 Err(e) => Err(e),
@@ -268,6 +275,70 @@ fn run_merge(app: AppHandle, project_id: i64, req: ModelRequest, feature_ids: Ve
         Ok(version) => emit(AnalysisEvent::Done { project_id, version, confidence, phases }),
         Err(detail) => emit(AnalysisEvent::Failed { project_id, detail }),
     }
+}
+
+/// Rebuild the plan from scratch (warned in the UI) — fresh analysis for a repo,
+/// or a fresh plan from the stored description otherwise. Does NOT carry status
+/// forward (that's what "update" is for); records an audit entry source=rebuild.
+#[tauri::command]
+pub fn rebuild_plan(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Result<(), String> {
+    let req = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let project = projects::get(&conn, project_id)?.ok_or("Project not found.")?;
+        let context = ProjectContext::assemble(&conn, project_id)?.to_prompt();
+        match project.clone_path.as_deref().filter(|cp| std::path::Path::new(cp).join(".git").is_dir()) {
+            Some(cp) => {
+                let docs = ingest::collect_existing_docs(cp);
+                let user = if docs.is_empty() {
+                    prompts::ANALYSIS_USER.to_string()
+                } else {
+                    format!("{docs}\n\n{}", prompts::ANALYSIS_USER)
+                };
+                let mut req = ModelRequest::planning(user);
+                req.system_append = Some(format!("{}\n\n{}", prompts::ANALYSIS_SYSTEM, context));
+                req.cwd = Some(cp.to_string());
+                req
+            }
+            None => {
+                let desc = stored_description(&conn, project_id)?;
+                let mut req = ModelRequest::planning(prompts::kickoff_user(&desc));
+                req.system_append = Some(prompts::KICKOFF_SYSTEM.to_string());
+                req
+            }
+        }
+    };
+    let app = app.clone();
+    std::thread::spawn(move || generate_plan(app, project_id, req, "rebuild"));
+    Ok(())
+}
+
+/// The text a description-only project was planned from (latest "what are you
+/// building?" answer, else the latest plan's current_state).
+fn stored_description(conn: &Connection, project_id: i64) -> Result<String, String> {
+    let answer: Option<String> = conn
+        .query_row(
+            "SELECT a.body FROM answers a JOIN questions q ON a.question_id = q.id \
+             WHERE q.project_id = ?1 AND q.text = 'What are you building?' ORDER BY a.id DESC LIMIT 1",
+            params![project_id],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    if let Some(d) = answer.filter(|s| !s.trim().is_empty()) {
+        return Ok(d);
+    }
+    let state: Option<String> = conn
+        .query_row(
+            "SELECT current_state FROM plans WHERE project_id = ?1 ORDER BY version DESC LIMIT 1",
+            params![project_id],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?
+        .flatten();
+    state
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| "Nothing to rebuild from — analyze or describe the project first.".into())
 }
 
 #[tauri::command]

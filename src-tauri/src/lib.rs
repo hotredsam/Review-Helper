@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use tauri::Manager;
 
 mod assess;
+mod audit;
 mod cards;
 mod chat;
 pub mod context;
@@ -70,7 +71,9 @@ pub fn run() {
             plan::commands::analyze_project,
             plan::commands::kickoff_project,
             plan::commands::update_plan,
+            plan::commands::rebuild_plan,
             plan::commands::get_plan,
+            audit::commands::audit_list,
             assess::commands::assess_project,
             assess::commands::get_assessment,
             cards::commands::cards_list,
