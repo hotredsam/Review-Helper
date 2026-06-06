@@ -78,8 +78,7 @@ pub fn list(conn: &Connection) -> Result<Vec<Card>, String> {
         .map_err(|e| e.to_string())
 }
 
-/// Upsert a card with full content (generation + chat capture). Wired in T2.
-#[allow(dead_code)]
+/// Upsert a card with full content (generation + chat capture).
 pub fn upsert(
     conn: &Connection,
     term: &str,
@@ -102,6 +101,22 @@ pub fn upsert(
     )
     .map_err(|e| e.to_string())?;
     get(conn, term)?.ok_or_else(|| "card vanished after upsert".into())
+}
+
+/// Capture an explanation (e.g. a chat answer) as a card, preserving any
+/// existing `when`/`why` so a capture never blanks a richer card.
+pub fn capture(conn: &Connection, term: &str, explanation: &str, domain: &str) -> Result<Card, String> {
+    let explanation = explanation.trim();
+    if explanation.is_empty() {
+        return Err("Nothing to capture.".into());
+    }
+    let (when_md, why_md) = match get(conn, term)? {
+        Some(c) => (c.when_md.unwrap_or_default(), c.why_md.unwrap_or_default()),
+        None => (String::new(), String::new()),
+    };
+    // `source` is constrained by the fixed schema to seed/detected/generated;
+    // a captured explanation is generated content.
+    upsert(conn, term, normalize_domain(domain), explanation, &when_md, &why_md, "generated")
 }
 
 /// Known technologies: (match key, display term, domain).
@@ -197,6 +212,60 @@ pub fn detect_tech_in_clone(conn: &Connection, clone_path: &str) -> Result<usize
     Ok(added)
 }
 
+// ---- On-demand generation (T2) ----
+
+const CARD_SYSTEM: &str = r#"You explain one concept as a learning card for someone vibecoding the right way (covering build AND product topics, not just tech). Given a TERM, produce a concise, honest card. Be accurate; if the term is ambiguous, take its most common software/product meaning. No fluff, no hype.
+
+Output ONLY this JSON object (first character {, last }):
+{"domain": one of "architecture"|"frontend"|"backend"|"pipes"|"deployment"|"business"|"design"|"ux"|"other",
+ "what": "1-2 sentences: what it is",
+ "when": "1 sentence: when to use it / reach for it",
+ "why": "1 sentence: why it matters or the key trade-off"}"#;
+
+#[derive(Deserialize)]
+pub(crate) struct GenCard {
+    #[serde(deserialize_with = "crate::plan::parse::flexible_string")]
+    pub domain: String,
+    #[serde(deserialize_with = "crate::plan::parse::flexible_string")]
+    pub what: String,
+    #[serde(deserialize_with = "crate::plan::parse::flexible_string")]
+    pub when: String,
+    #[serde(deserialize_with = "crate::plan::parse::flexible_string")]
+    pub why: String,
+}
+
+/// Normalize a model-supplied domain to a schema-valid value (CHECK constraint).
+pub(crate) fn normalize_domain(d: &str) -> &'static str {
+    match d.trim().to_lowercase().as_str() {
+        "architecture" => "architecture",
+        "frontend" => "frontend",
+        "backend" => "backend",
+        "pipes" => "pipes",
+        "deployment" => "deployment",
+        "business" => "business",
+        "design" => "design",
+        "ux" => "ux",
+        _ => "other",
+    }
+}
+
+/// Generate a card's content for a term via the model (no DB access).
+pub(crate) fn generate_card(term: &str) -> Result<GenCard, String> {
+    use crate::model::claude::ClaudeCodeProvider;
+    use crate::model::{ModelEvent, ModelProvider, ModelRequest};
+    let mut req = ModelRequest::planning(format!("Explain this term as a card: {}", term.trim()));
+    req.system_append = Some(CARD_SYSTEM.to_string());
+    let mut text = None;
+    ClaudeCodeProvider::new().run(&req, &mut |e: ModelEvent| {
+        if let ModelEvent::Completed { text: t, .. } = e {
+            text = Some(t);
+        }
+    });
+    let text = text.ok_or("The model produced no result.")?;
+    let json = crate::plan::parse::extract_json(&text).ok_or("No card JSON found in the output.")?;
+    serde_json::from_str::<GenCard>(json).map_err(|e| format!("Card JSON invalid: {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,6 +300,26 @@ mod tests {
     }
 
     #[test]
+    fn capture_yields_retrievable_card_and_preserves_when_why() {
+        let conn = db();
+        // A chat explanation becomes a retrievable card.
+        let c = capture(&conn, "Idempotency", "Same call, same effect.", "backend").unwrap();
+        assert_eq!(c.what_md.as_deref(), Some("Same call, same effect."));
+        assert_eq!(c.source.as_deref(), Some("generated"));
+        assert!(get(&conn, "idempotency").unwrap().is_some()); // retrievable, case-insensitive
+
+        // Enrich it with when/why, then re-capture: when/why are preserved.
+        upsert(&conn, "Idempotency", "backend", "x", "on retries", "avoids dup writes", "generated").unwrap();
+        let re = capture(&conn, "Idempotency", "Updated explanation.", "backend").unwrap();
+        assert_eq!(re.what_md.as_deref(), Some("Updated explanation."));
+        assert_eq!(re.when_md.as_deref(), Some("on retries"));
+        assert_eq!(re.why_md.as_deref(), Some("avoids dup writes"));
+
+        // Empty explanation is rejected.
+        assert!(capture(&conn, "Idempotency", "   ", "backend").is_err());
+    }
+
+    #[test]
     fn detects_tech_from_manifests_with_word_boundaries() {
         let conn = db();
         let dir = std::env::temp_dir().join(format!("rh-cards-{}", std::process::id()));
@@ -256,5 +345,17 @@ mod tests {
         assert!(mentions("react-dom", "react"));
         assert!(!mentions("preact", "react"));
         assert!(!mentions("contextual", "next"));
+    }
+
+    #[test]
+    #[ignore = "real model card generation; needs auth + uses credits. Run: cargo test -- --ignored"]
+    fn real_card_generation() {
+        let card = generate_card("Bloom filter").unwrap();
+        assert!(!card.what.trim().is_empty());
+        let domains = [
+            "architecture", "frontend", "backend", "pipes", "deployment", "business", "design",
+            "ux", "other",
+        ];
+        assert!(domains.contains(&normalize_domain(&card.domain)));
     }
 }

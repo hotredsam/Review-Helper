@@ -10,6 +10,8 @@ mod github;
 pub mod model;
 mod plan;
 mod projects;
+#[cfg(test)]
+mod seed_real;
 mod settings;
 
 /// App identity returned to the frontend over the Tauri bridge.
@@ -64,6 +66,8 @@ pub fn run() {
             assess::commands::get_assessment,
             cards::commands::cards_list,
             cards::commands::card_get,
+            cards::commands::card_explain,
+            cards::commands::card_capture,
             projects::create_project,
             projects::list_projects,
             projects::get_project,

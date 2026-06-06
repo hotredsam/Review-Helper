@@ -4,6 +4,7 @@ import { SettingsView } from "./SettingsView";
 import { RepoCache } from "./RepoCache";
 import { PlanPane } from "./PlanPane";
 import { StatePane } from "./StatePane";
+import { UnderstandHub } from "./UnderstandHub";
 import { sectionById } from "../nav/sections";
 import { useUiStore } from "../store/uiStore";
 import { useProjectStore } from "../store/projectStore";
@@ -58,6 +59,8 @@ export function MainPane({ onNewProject }: Props) {
           <SettingsView />
         ) : section.id === "overview" && active ? (
           <StatePane project={active} />
+        ) : section.id === "understand" && active ? (
+          <UnderstandHub />
         ) : section.id === "plan" && active ? (
           <PlanPane project={active} />
         ) : (

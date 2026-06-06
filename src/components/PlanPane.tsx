@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Loader2, Play, Sparkles, AlertTriangle } from "lucide-react";
 import { usePlanStore, ensureAnalysisListener } from "../store/planStore";
+import { WhyExplain } from "./WhyExplain";
 import type { Project } from "../api/projects";
 
 /**
@@ -170,6 +171,7 @@ export function PlanPane({ project }: { project: Project }) {
               <span className="font-medium text-fg">{d.topic}:</span>{" "}
               <span className="text-fg-muted">{d.choice}</span>
               {d.rationale && <span className="text-fg-subtle"> — {d.rationale}</span>}
+              <WhyExplain term={d.choice || d.topic} />
             </div>
           ))}
         </section>
@@ -184,6 +186,7 @@ export function PlanPane({ project }: { project: Project }) {
                 <div key={s.pane} className="text-sm">
                   <span className="capitalize text-fg-subtle">{s.pane}:</span>{" "}
                   <span className="text-fg">{s.choice}</span>
+                  <WhyExplain term={s.choice} />
                 </div>
               ),
           )}
