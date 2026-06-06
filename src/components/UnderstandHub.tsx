@@ -87,6 +87,7 @@ export function UnderstandHub() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            maxLength={200}
             placeholder="Explain anything — a term, concept, or technology…"
             className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-3 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
@@ -107,7 +108,9 @@ export function UnderstandHub() {
         </p>
       )}
 
-      {selected && <CardDetail card={selected} />}
+      <div aria-live="polite" aria-atomic="true">
+        {selected && <CardDetail card={selected} />}
+      </div>
 
       <div className="space-y-4">
         {grouped.map((g) => (
@@ -121,6 +124,7 @@ export function UnderstandHub() {
                   key={c.id}
                   type="button"
                   onClick={() => void openCard(c)}
+                  aria-label={c.what_md ? c.term : `${c.term} — generate explanation`}
                   className={
                     "rounded-full border px-3 py-1 text-sm transition-colors " +
                     (selected?.id === c.id
@@ -129,7 +133,11 @@ export function UnderstandHub() {
                   }
                 >
                   {c.term}
-                  {!c.what_md && <span className="ml-1 text-xs text-fg-subtle">·</span>}
+                  {!c.what_md && (
+                    <span aria-hidden="true" className="ml-1 text-xs text-fg-subtle">
+                      ·
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

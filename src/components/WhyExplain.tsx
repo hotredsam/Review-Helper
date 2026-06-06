@@ -32,17 +32,23 @@ export function WhyExplain({ term }: { term: string }) {
     }
   };
 
+  const explainId = `explain-${term.toLowerCase().replace(/\s+/g, "-")}`;
+
   return (
     <>
       <button
         type="button"
         onClick={() => void toggle()}
-        className="ml-1 inline-flex items-center gap-0.5 align-baseline text-xs text-accent hover:underline"
+        disabled={busy}
+        aria-expanded={open}
+        aria-controls={explainId}
+        aria-label={`Why: ${term}`}
+        className="ml-1 inline-flex items-center gap-0.5 align-baseline py-1 text-xs text-accent hover:underline disabled:opacity-60"
       >
         <HelpCircle className="h-3 w-3" /> Why?
       </button>
       {open && (
-        <div className="mt-1 rounded-md border border-border bg-surface-2 p-2 text-xs">
+        <div id={explainId} className="mt-1 rounded-md border border-border bg-surface-2 p-2 text-xs">
           {busy && (
             <span className="flex items-center gap-1 text-fg-subtle">
               <Loader2 className="h-3 w-3 animate-spin" /> Explaining…

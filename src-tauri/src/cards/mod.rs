@@ -6,6 +6,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 pub mod commands;
+mod detect;
+pub use detect::detect_tech_in_clone;
 
 const SEED_JSON: &str = include_str!("seed_cards.json");
 
@@ -92,6 +94,10 @@ pub fn upsert(
     if term.is_empty() {
         return Err("A card needs a term.".into());
     }
+    // NOTE: schema's UNIQUE(term) is case-sensitive while get() looks up COLLATE
+    // NOCASE. The get-before-upsert pattern in callers + ON CONFLICT(term) keep
+    // duplicate case-variants unreachable from app code today. Making the
+    // constraint itself NOCASE is a fixed-schema change that needs sign-off.
     conn.execute(
         "INSERT INTO learning_cards (term, domain, what_md, when_md, why_md, source) \
          VALUES (?1, ?2, ?3, ?4, ?5, ?6) \
@@ -119,99 +125,6 @@ pub fn capture(conn: &Connection, term: &str, explanation: &str, domain: &str) -
     upsert(conn, term, normalize_domain(domain), explanation, &when_md, &why_md, "generated")
 }
 
-/// Known technologies: (match key, display term, domain).
-const KNOWN_TECH: &[(&str, &str, &str)] = &[
-    ("react", "React", "frontend"),
-    ("vue", "Vue", "frontend"),
-    ("svelte", "Svelte", "frontend"),
-    ("angular", "Angular", "frontend"),
-    ("solid-js", "SolidJS", "frontend"),
-    ("next", "Next.js", "frontend"),
-    ("nuxt", "Nuxt", "frontend"),
-    ("vite", "Vite", "frontend"),
-    ("tailwindcss", "Tailwind CSS", "frontend"),
-    ("typescript", "TypeScript", "frontend"),
-    ("express", "Express", "backend"),
-    ("fastify", "Fastify", "backend"),
-    ("nestjs", "NestJS", "backend"),
-    ("django", "Django", "backend"),
-    ("flask", "Flask", "backend"),
-    ("fastapi", "FastAPI", "backend"),
-    ("rails", "Ruby on Rails", "backend"),
-    ("laravel", "Laravel", "backend"),
-    ("axum", "Axum", "backend"),
-    ("actix-web", "Actix Web", "backend"),
-    ("postgresql", "PostgreSQL", "backend"),
-    ("postgres", "PostgreSQL", "backend"),
-    ("mysql", "MySQL", "backend"),
-    ("sqlite", "SQLite", "backend"),
-    ("rusqlite", "SQLite", "backend"),
-    ("mongodb", "MongoDB", "backend"),
-    ("redis", "Redis", "backend"),
-    ("prisma", "Prisma", "backend"),
-    ("graphql", "GraphQL", "backend"),
-    ("tauri", "Tauri", "architecture"),
-    ("electron", "Electron", "architecture"),
-    ("docker", "Docker", "deployment"),
-    ("kubernetes", "Kubernetes", "deployment"),
-    ("terraform", "Terraform", "deployment"),
-    ("kafka", "Kafka", "pipes"),
-    ("celery", "Celery", "pipes"),
-    ("stripe", "Stripe", "pipes"),
-];
-
-fn is_word_char(b: u8) -> bool {
-    b.is_ascii_alphanumeric()
-}
-
-/// Whole-word (boundary-aware) presence check, to avoid matching e.g. "react"
-/// inside "preact". `haystack` should already be lowercased.
-fn mentions(haystack: &str, word: &str) -> bool {
-    let bytes = haystack.as_bytes();
-    let mut from = 0;
-    while let Some(pos) = haystack[from..].find(word) {
-        let start = from + pos;
-        let end = start + word.len();
-        let before_ok = start == 0 || !is_word_char(bytes[start - 1]);
-        let after_ok = end >= bytes.len() || !is_word_char(bytes[end]);
-        if before_ok && after_ok {
-            return true;
-        }
-        from = start + 1;
-    }
-    false
-}
-
-/// Scan a clone's manifests for known tech and add detected-tech cards (content
-/// generated on demand). Returns the number added.
-pub fn detect_tech_in_clone(conn: &Connection, clone_path: &str) -> Result<usize, String> {
-    let root = std::path::Path::new(clone_path);
-    let manifests = [
-        "package.json", "Cargo.toml", "requirements.txt", "pyproject.toml", "go.mod", "Gemfile",
-        "composer.json", "pom.xml",
-    ];
-    let mut haystack = String::new();
-    for m in manifests {
-        if let Ok(c) = std::fs::read_to_string(root.join(m)) {
-            haystack.push_str(&c.to_lowercase());
-            haystack.push('\n');
-        }
-    }
-    let mut added = 0;
-    for (key, term, domain) in KNOWN_TECH {
-        if mentions(&haystack, key) && get(conn, term)?.is_none() {
-            conn.execute(
-                "INSERT INTO learning_cards (term, domain, source) VALUES (?1, ?2, 'detected') \
-                 ON CONFLICT(term) DO NOTHING",
-                params![term, domain],
-            )
-            .map_err(|e| e.to_string())?;
-            added += 1;
-        }
-    }
-    Ok(added)
-}
-
 // ---- On-demand generation (T2) ----
 
 const CARD_SYSTEM: &str = r#"You explain one concept as a learning card for someone vibecoding the right way (covering build AND product topics, not just tech). Given a TERM, produce a concise, honest card. Be accurate; if the term is ambiguous, take its most common software/product meaning. No fluff, no hype.
@@ -222,7 +135,7 @@ Output ONLY this JSON object (first character {, last }):
  "when": "1 sentence: when to use it / reach for it",
  "why": "1 sentence: why it matters or the key trade-off"}"#;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct GenCard {
     #[serde(deserialize_with = "crate::plan::parse::flexible_string")]
     pub domain: String,
@@ -249,21 +162,42 @@ pub(crate) fn normalize_domain(d: &str) -> &'static str {
     }
 }
 
-/// Generate a card's content for a term via the model (no DB access).
+/// Parse + validate model output into a GenCard. Rejects malformed JSON and
+/// incomplete content (empty what/when/why) so an empty card is never stored —
+/// the "never dead-end" invariant is enforced here, not just in tests.
+fn parse_gen_card(text: &str) -> Result<GenCard, String> {
+    let json = crate::plan::parse::extract_json(text).ok_or("No card JSON found in the output.")?;
+    let card: GenCard = serde_json::from_str(json).map_err(|_| {
+        "Could not generate a card for that term — the model's response was malformed. Please try again."
+            .to_string()
+    })?;
+    if card.what.trim().is_empty() || card.when.trim().is_empty() || card.why.trim().is_empty() {
+        return Err("The model returned incomplete card content. Please try again.".into());
+    }
+    Ok(card)
+}
+
+/// Generate a card's content for a term via the model (no DB access). Surfaces
+/// the real failure detail on the offline / unavailable / errored paths.
 pub(crate) fn generate_card(term: &str) -> Result<GenCard, String> {
     use crate::model::claude::ClaudeCodeProvider;
     use crate::model::{ModelEvent, ModelProvider, ModelRequest};
     let mut req = ModelRequest::planning(format!("Explain this term as a card: {}", term.trim()));
     req.system_append = Some(CARD_SYSTEM.to_string());
     let mut text = None;
-    ClaudeCodeProvider::new().run(&req, &mut |e: ModelEvent| {
-        if let ModelEvent::Completed { text: t, .. } = e {
-            text = Some(t);
+    let mut failure: Option<String> = None;
+    ClaudeCodeProvider::new().run(&req, &mut |e: ModelEvent| match e {
+        ModelEvent::Completed { text: t, .. } => text = Some(t),
+        ModelEvent::Unavailable { detail, .. } | ModelEvent::Failed { detail } => {
+            failure = Some(detail)
         }
+        _ => {}
     });
+    if let Some(detail) = failure {
+        return Err(detail);
+    }
     let text = text.ok_or("The model produced no result.")?;
-    let json = crate::plan::parse::extract_json(&text).ok_or("No card JSON found in the output.")?;
-    serde_json::from_str::<GenCard>(json).map_err(|e| format!("Card JSON invalid: {e}"))
+    parse_gen_card(&text)
 }
 
 #[cfg(test)]
@@ -320,31 +254,19 @@ mod tests {
     }
 
     #[test]
-    fn detects_tech_from_manifests_with_word_boundaries() {
-        let conn = db();
-        let dir = std::env::temp_dir().join(format!("rh-cards-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(
-            dir.join("package.json"),
-            r#"{"dependencies":{"react":"19","express":"4","preact-compat":"1"}}"#,
-        )
-        .unwrap();
-
-        let added = detect_tech_in_clone(&conn, dir.to_str().unwrap()).unwrap();
-        assert!(added >= 2);
-        assert!(get(&conn, "React").unwrap().is_some());
-        assert!(get(&conn, "Express").unwrap().is_some());
-        assert_eq!(get(&conn, "React").unwrap().unwrap().source.as_deref(), Some("detected"));
-
-        std::fs::remove_dir_all(&dir).ok();
-    }
-
-    #[test]
-    fn mentions_respects_word_boundaries() {
-        assert!(mentions("\"react\": \"19\"", "react"));
-        assert!(mentions("react-dom", "react"));
-        assert!(!mentions("preact", "react"));
-        assert!(!mentions("contextual", "next"));
+    fn parse_gen_card_rejects_incomplete_or_malformed_content() {
+        // null coerces to "" via flexible_string -> incomplete -> Err (never dead-end).
+        assert!(parse_gen_card(r#"{"domain":"backend","what":null,"when":"x","why":"y"}"#).is_err());
+        // whitespace-only field -> incomplete -> Err.
+        assert!(parse_gen_card(r#"{"domain":"backend","what":"  ","when":"x","why":"y"}"#).is_err());
+        // not JSON at all -> malformed -> Err (user-actionable message, no serde internals).
+        let e = parse_gen_card("the model refused").unwrap_err();
+        assert!(!e.contains("expected"), "error should not leak serde internals: {e}");
+        // complete content -> Ok.
+        let ok = parse_gen_card(r#"{"domain":"backend","what":"It is X.","when":"When Y.","why":"Because Z."}"#)
+            .unwrap();
+        assert_eq!(ok.what, "It is X.");
+        assert_eq!(normalize_domain(&ok.domain), "backend");
     }
 
     #[test]

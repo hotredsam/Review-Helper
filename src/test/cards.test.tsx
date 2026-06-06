@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -18,6 +18,7 @@ vi.mock("../api/cards", () => ({
   })),
 }));
 
+import { cardsList, cardExplain } from "../api/cards";
 import { UnderstandHub } from "../components/UnderstandHub";
 import { WhyExplain } from "../components/WhyExplain";
 
@@ -26,6 +27,7 @@ beforeEach(() => {
     { id: 1, term: "MVP", domain: "business", what_md: "min viable", when_md: "start", why_md: "learn fast", source: "seed" },
   ];
 });
+afterEach(() => vi.clearAllMocks());
 
 describe("UnderstandHub", () => {
   it("browses seeded cards and opens one", async () => {
@@ -43,14 +45,58 @@ describe("UnderstandHub", () => {
     await user.click(screen.getByRole("button", { name: /Explain/i }));
     expect(await screen.findByText("It is a generated explanation.")).toBeTruthy();
   });
+
+  it("surfaces an error (offline) when listing cards fails", async () => {
+    vi.mocked(cardsList).mockRejectedValueOnce(new Error("Claude not available"));
+    render(<UnderstandHub />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Claude not available");
+  });
+
+  it("surfaces an error when generation fails — never silently dead-ends", async () => {
+    const user = userEvent.setup();
+    render(<UnderstandHub />);
+    await screen.findByRole("button", { name: "MVP" });
+    vi.mocked(cardExplain).mockRejectedValueOnce(new Error("Model unavailable"));
+    await user.type(screen.getByPlaceholderText(/Explain anything/i), "Bloom filter");
+    await user.click(screen.getByRole("button", { name: /Explain/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Model unavailable");
+  });
+
+  it("renders only the populated sections of a partial card", async () => {
+    const user = userEvent.setup();
+    render(<UnderstandHub />);
+    await screen.findByRole("button", { name: "MVP" });
+    vi.mocked(cardExplain).mockResolvedValueOnce({
+      id: 5,
+      term: "Partial",
+      domain: "other",
+      what_md: "Only the what.",
+      when_md: "",
+      why_md: "",
+      source: "generated",
+    });
+    await user.type(screen.getByPlaceholderText(/Explain anything/i), "Partial");
+    await user.click(screen.getByRole("button", { name: /Explain/i }));
+    expect(await screen.findByText("Only the what.")).toBeTruthy();
+    expect(screen.queryByText("When to use it")).toBeNull();
+    expect(screen.queryByText("Why it matters")).toBeNull();
+  });
 });
 
 describe("WhyExplain", () => {
   it("surfaces a rationale card on demand and links it", async () => {
     const user = userEvent.setup();
     render(<WhyExplain term="SQLite" />);
-    await user.click(screen.getByRole("button", { name: /Why\?/i }));
+    await user.click(screen.getByRole("button", { name: /why/i }));
     expect(await screen.findByText("SQLite:")).toBeTruthy();
     expect(screen.getByText("It is a generated explanation.")).toBeTruthy();
+  });
+
+  it("surfaces an error when the explanation fails", async () => {
+    const user = userEvent.setup();
+    vi.mocked(cardExplain).mockRejectedValueOnce(new Error("Out of credits"));
+    render(<WhyExplain term="SQLite" />);
+    await user.click(screen.getByRole("button", { name: /why/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Out of credits");
   });
 });

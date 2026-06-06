@@ -41,6 +41,7 @@ pub fn run() {
             let conn = db::connect_app_db(app.handle())?;
             let _ = cards::seed(&conn); // best-effort seed of the curated cards
             app.manage(db::Db(Mutex::new(conn)));
+            app.manage(cards::commands::CardGate::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
