@@ -1,0 +1,216 @@
+//! GitHub sync-out — render the planning package (the `.planning/` docs + a
+//! per-project CLAUDE.md) from the current plan/decisions/stack, then push it
+//! and the per-phase issues behind a confirmed preview (idempotent). T1 is the
+//! pure package renderer; T2–T4 add the GitHub writes.
+
+use rusqlite::Connection;
+use serde::Serialize;
+
+pub mod commands;
+
+use crate::plan::store::{get_plan, PhaseView, PlanView};
+
+/// One file in the planning package: a repo-relative path + its full contents.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct PackageFile {
+    pub path: String,
+    pub content: String,
+}
+
+fn slug(s: &str) -> String {
+    let mut out = String::new();
+    let mut prev_dash = false;
+    for ch in s.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.extend(ch.to_lowercase());
+            prev_dash = false;
+        } else if !out.is_empty() && !prev_dash {
+            out.push('-');
+            prev_dash = true;
+        }
+    }
+    let t = out.trim_matches('-');
+    if t.is_empty() { "phase".into() } else { t.chars().take(40).collect() }
+}
+
+fn marker(status: &str) -> &'static str {
+    match status {
+        "done" => "[x]",
+        "in_progress" => "[~]",
+        _ => "[ ]",
+    }
+}
+
+fn phase_filename(i: usize, title: &str) -> String {
+    format!(".planning/phases/phase-{:02}-{}.md", i + 1, slug(title))
+}
+
+/// The package files for the current plan. Returns an empty Vec if there's no
+/// plan yet (nothing to sync).
+pub fn package(conn: &Connection, project_id: i64) -> Result<Vec<PackageFile>, String> {
+    let project_name: String = conn
+        .query_row("SELECT name FROM projects WHERE id = ?1", [project_id], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    let plan = match get_plan(conn, project_id)? {
+        Some(p) => p,
+        None => return Ok(vec![]),
+    };
+    Ok(render_package(&project_name, &plan))
+}
+
+/// Render the package from an in-memory plan (pure — easy to test).
+pub fn render_package(project_name: &str, plan: &PlanView) -> Vec<PackageFile> {
+    let mut files = vec![PackageFile {
+        path: ".planning/PLAN.md".into(),
+        content: render_plan_md(project_name, plan),
+    }];
+    for (i, ph) in plan.phases.iter().enumerate() {
+        files.push(PackageFile {
+            path: phase_filename(i, &ph.title),
+            content: render_phase_md(i, ph),
+        });
+    }
+    files.push(PackageFile {
+        path: "CLAUDE.md".into(),
+        content: render_claude_md(project_name, plan),
+    });
+    files
+}
+
+fn render_plan_md(project_name: &str, plan: &PlanView) -> String {
+    let resume = plan
+        .phases
+        .iter()
+        .find(|p| p.status != "done")
+        .map(|p| format!("Resume at “{}”.", p.title))
+        .unwrap_or_else(|| "All phases complete.".into());
+
+    let mut s = format!("# Plan — {project_name}\n\n");
+    s.push_str(&format!("> {resume} Plan version {}. Managed by Review Helper.\n\n", plan.version));
+    if let Some(cs) = plan.current_state.as_deref().filter(|c| !c.trim().is_empty()) {
+        s.push_str(&format!("## Current state\n\n{}\n\n", cs.trim()));
+    }
+    if let Some(body) = plan.body_md.as_deref().filter(|b| !b.trim().is_empty()) {
+        s.push_str(&format!("## Overview\n\n{}\n\n", body.trim()));
+    }
+    s.push_str("## Phases\n\n| # | Phase | Status |\n|---|-------|--------|\n");
+    for (i, ph) in plan.phases.iter().enumerate() {
+        s.push_str(&format!("| {} | {} | {} {} |\n", i + 1, ph.title, marker(&ph.status), ph.status));
+    }
+    if !plan.decisions.is_empty() {
+        s.push_str("\n## Decisions\n\n");
+        for d in &plan.decisions {
+            s.push_str(&format!("- **{}**: {}", d.topic, d.choice));
+            if let Some(r) = d.rationale.as_deref().filter(|r| !r.is_empty()) {
+                s.push_str(&format!(" — {r}"));
+            }
+            s.push('\n');
+        }
+    }
+    let stack: Vec<&crate::plan::store::StackView> = plan.stack.iter().filter(|s| s.choice.is_some()).collect();
+    if !stack.is_empty() {
+        s.push_str("\n## Stack\n\n");
+        for st in stack {
+            s.push_str(&format!("- {}: {}\n", st.pane, st.choice.as_deref().unwrap_or("")));
+        }
+    }
+    s
+}
+
+fn render_phase_md(i: usize, ph: &PhaseView) -> String {
+    let mut s = format!("# Phase {}: {}\nStatus: {}\n", i + 1, ph.title, ph.status);
+    if let Some(g) = ph.goal.as_deref().filter(|g| !g.trim().is_empty()) {
+        s.push_str(&format!("\n{}\n", g.trim()));
+    }
+    s.push_str("\n## Tasks\n");
+    for t in &ph.tasks {
+        s.push_str(&format!("- {} {}", marker(&t.status), t.title));
+        if let Some(v) = t.verification.as_deref().filter(|v| !v.trim().is_empty()) {
+            s.push_str(&format!(" — Done when: {}", v.trim()));
+        }
+        s.push('\n');
+    }
+    s
+}
+
+fn render_claude_md(project_name: &str, plan: &PlanView) -> String {
+    let mut s = format!(
+        "# CLAUDE.md — {project_name}\n\nStanding rules for building this project. Generated by Review Helper from the plan; re-read before each task.\n\n"
+    );
+    s.push_str("## How to work\n\n- Work one phase at a time, in order; see `.planning/PLAN.md` and the phase files.\n- Tick a task only when its \"Done when\" check passes. Keep commits atomic.\n- Small, single-responsibility files; handle the unhappy paths as you build.\n\n");
+    let stack: Vec<&crate::plan::store::StackView> = plan.stack.iter().filter(|s| s.choice.is_some()).collect();
+    if !stack.is_empty() {
+        s.push_str("## Stack\n\n");
+        for st in stack {
+            s.push_str(&format!("- {}: {}\n", st.pane, st.choice.as_deref().unwrap_or("")));
+        }
+        s.push('\n');
+    }
+    if !plan.decisions.is_empty() {
+        s.push_str("## Key decisions\n\n");
+        for d in &plan.decisions {
+            s.push_str(&format!("- {}: {}", d.topic, d.choice));
+            if let Some(r) = d.rationale.as_deref().filter(|r| !r.is_empty()) {
+                s.push_str(&format!(" — {r}"));
+            }
+            s.push('\n');
+        }
+    }
+    s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::init_connection;
+    use crate::plan::parse::{GenDecision, GenPhase, GenStack, GenTask, GeneratedPlan};
+    use crate::plan::store::save_generated_plan;
+
+    fn db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        init_connection(&conn).unwrap();
+        conn
+    }
+
+    #[test]
+    fn package_reflects_plan_and_carries_status_markers() {
+        let mut conn = db();
+        conn.execute("INSERT INTO projects (name, kind) VALUES ('Demo','new')", []).unwrap();
+        let pid = conn.last_insert_rowid();
+        let plan = GeneratedPlan {
+            current_state: "Early scaffold.".into(),
+            body_md: "## Arc".into(),
+            confidence: "low".into(),
+            notes: "".into(),
+            phases: vec![
+                GenPhase { title: "Setup".into(), goal: "Runs".into(), tasks: vec![GenTask { title: "Init".into(), body: "".into(), verification: "it runs".into() }] },
+                GenPhase { title: "Build".into(), goal: "Core".into(), tasks: vec![GenTask { title: "Core".into(), body: "".into(), verification: "works".into() }] },
+            ],
+            decisions: vec![GenDecision { topic: "DB".into(), choice: "SQLite".into(), rationale: "simple".into(), alternatives: "".into(), consequences: "".into() }],
+            stack: GenStack { frontend: Some("React".into()), backend: None, database: Some("SQLite".into()), deployment: None, pipes: None },
+        };
+        let v = save_generated_plan(&mut conn, pid, &plan).unwrap();
+        // Complete the first phase so the package shows a status marker + resume.
+        conn.execute("UPDATE phases SET status='done' WHERE project_id=?1 AND plan_version=?2 AND title='Setup'", rusqlite::params![pid, v]).unwrap();
+
+        let files = package(&conn, pid).unwrap();
+        let plan_md = &files.iter().find(|f| f.path == ".planning/PLAN.md").unwrap().content;
+        assert!(plan_md.contains("[x] done"), "done marker present");
+        assert!(plan_md.contains("[ ] not_started"), "not-started marker present");
+        assert!(plan_md.contains("Resume at “Build”."), "resume points to first not-done phase");
+        assert!(plan_md.contains("DB") && plan_md.contains("SQLite"));
+
+        assert!(files.iter().any(|f| f.path == ".planning/phases/phase-01-setup.md"));
+        assert!(files.iter().any(|f| f.path == ".planning/phases/phase-02-build.md"));
+        let claude = &files.iter().find(|f| f.path == "CLAUDE.md").unwrap().content;
+        assert!(claude.contains("Stack") && claude.contains("React"));
+    }
+
+    #[test]
+    fn no_plan_yields_empty_package() {
+        let conn = db();
+        conn.execute("INSERT INTO projects (name, kind) VALUES ('Empty','new')", []).unwrap();
+        let pid = conn.last_insert_rowid();
+        assert!(package(&conn, pid).unwrap().is_empty());
+    }
+}

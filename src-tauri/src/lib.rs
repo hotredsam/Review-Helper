@@ -17,6 +17,7 @@ mod plan;
 mod projects;
 mod stack;
 mod suggestions;
+mod sync;
 #[cfg(test)]
 mod seed_real;
 mod settings;
@@ -74,6 +75,7 @@ pub fn run() {
             plan::commands::rebuild_plan,
             plan::commands::get_plan,
             audit::commands::audit_list,
+            sync::commands::sync_package,
             assess::commands::assess_project,
             assess::commands::get_assessment,
             cards::commands::cards_list,
