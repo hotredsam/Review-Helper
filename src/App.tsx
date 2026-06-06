@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { MainPane } from "./components/MainPane";
 import { NewProjectDialog } from "./components/NewProjectDialog";
+import { ModelBanner } from "./components/ModelBanner";
 import { useProjectStore } from "./store/projectStore";
+import { useStatusStore } from "./store/statusStore";
 
 /**
  * App shell: loads projects from the database on mount, then renders the
@@ -14,10 +16,15 @@ function App() {
   const load = useProjectStore((s) => s.load);
   const projects = useProjectStore((s) => s.projects);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const refreshStatus = useStatusStore((s) => s.refresh);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    void refreshStatus();
+  }, [refreshStatus]);
 
   if (status === "idle" || status === "loading") {
     return <CenterMessage text="Loading…" />;
@@ -29,11 +36,14 @@ function App() {
   const openNewProject = () => setDialogOpen(true);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-bg text-fg">
-      <Sidebar onNewProject={openNewProject} hasProject={projects.length > 0} />
-      <main className="flex-1 overflow-hidden">
-        <MainPane onNewProject={openNewProject} />
-      </main>
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg text-fg">
+      <ModelBanner />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar onNewProject={openNewProject} hasProject={projects.length > 0} />
+        <main className="flex-1 overflow-hidden">
+          <MainPane onNewProject={openNewProject} />
+        </main>
+      </div>
       <NewProjectDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
     </div>
   );

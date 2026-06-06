@@ -235,7 +235,7 @@ fn classify_result(v: &Value) -> ModelEvent {
     }
 }
 
-fn classify_stderr(detail: &str) -> UnavailableReason {
+pub(crate) fn classify_stderr(detail: &str) -> UnavailableReason {
     let d = detail.to_lowercase();
     if d.contains("not found") || d.contains("no such file") {
         UnavailableReason::NotInstalled

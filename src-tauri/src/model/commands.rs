@@ -1,12 +1,15 @@
-//! Tauri commands for the model layer. The frontend calls `model_run` and listens
-//! for `model-event`s; it never spawns `claude` itself. Routing (Claude vs. the
-//! local stub) is read from the persisted settings on every call.
+//! Tauri commands for the model layer. The frontend calls `model_run`/`model_status`
+//! and listens for `model-event`s; it never spawns `claude` itself. Routing
+//! (Claude vs. the local stub) is read from the persisted settings on every call.
 
+use std::process::Command;
+
+use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use super::claude::ClaudeCodeProvider;
+use super::claude::{classify_stderr, ClaudeCodeProvider};
 use super::local::LocalStubProvider;
-use super::{ModelEvent, ModelProvider, ModelRequest};
+use super::{ModelEvent, ModelProvider, ModelRequest, UnavailableReason};
 use crate::db::Db;
 use crate::settings::{load_model_config, ModelConfig, ProviderKind};
 
@@ -37,6 +40,80 @@ pub fn model_run(app: AppHandle, db: State<'_, Db>, prompt: String, session_id: 
     });
 }
 
+/// Whether the active provider is usable, with enough debug detail (the probe
+/// command, exit code, stderr) to explain why not. Drives the "Claude not
+/// available" banner and the debug panel.
+#[derive(Debug, Serialize)]
+pub struct ModelStatus {
+    pub provider: ProviderKind,
+    pub available: bool,
+    pub version: Option<String>,
+    pub reason: Option<UnavailableReason>,
+    pub command: String,
+    pub exit_code: Option<i32>,
+    pub stderr: String,
+}
+
+#[tauri::command]
+pub fn model_status(db: State<'_, Db>) -> Result<ModelStatus, String> {
+    let config = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        load_model_config(&conn)
+    };
+    Ok(match config.provider {
+        ProviderKind::Local => ModelStatus {
+            provider: ProviderKind::Local,
+            available: true,
+            version: None,
+            reason: None,
+            command: "(local stub)".into(),
+            exit_code: Some(0),
+            stderr: String::new(),
+        },
+        ProviderKind::Claude => probe_claude("claude"),
+    })
+}
+
+/// Probe the Claude CLI with `--version` (free; no model call) and report the
+/// command, exit code and stderr so the UI can explain availability.
+fn probe_claude(binary: &str) -> ModelStatus {
+    let command = format!("{binary} --version");
+    match Command::new(binary).arg("--version").output() {
+        Ok(out) => {
+            let available = out.status.success();
+            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+            ModelStatus {
+                provider: ProviderKind::Claude,
+                available,
+                version: available
+                    .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string()),
+                reason: (!available).then(|| classify_stderr(&stderr)),
+                command,
+                exit_code: out.status.code(),
+                stderr,
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => ModelStatus {
+            provider: ProviderKind::Claude,
+            available: false,
+            version: None,
+            reason: Some(UnavailableReason::NotInstalled),
+            command,
+            exit_code: None,
+            stderr: format!("`{binary}` was not found on PATH."),
+        },
+        Err(e) => ModelStatus {
+            provider: ProviderKind::Claude,
+            available: false,
+            version: None,
+            reason: Some(UnavailableReason::Unknown),
+            command,
+            exit_code: None,
+            stderr: e.to_string(),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,8 +128,16 @@ mod tests {
         let provider = provider_for(&config);
         let mut events = Vec::new();
         provider.run(&ModelRequest::planning("hi"), &mut |e| events.push(e));
-        // The stub yields exactly one terminal "unavailable" notice.
         assert_eq!(events.len(), 1);
         assert!(matches!(events[0], ModelEvent::Unavailable { .. }));
+    }
+
+    #[test]
+    fn probe_of_missing_binary_is_unavailable() {
+        let status = probe_claude("definitely-not-a-real-binary-xyz");
+        assert!(!status.available);
+        assert_eq!(status.reason, Some(UnavailableReason::NotInstalled));
+        assert!(status.version.is_none());
+        assert!(status.command.contains("--version"));
     }
 }

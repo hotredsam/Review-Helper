@@ -1,6 +1,7 @@
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { ModelConsole } from "./ModelConsole";
 import { ProviderSettings } from "./ProviderSettings";
+import { ModelDebug } from "./ModelDebug";
 
 /** Minimal Settings pane. Theme is functional now; the model provider and other
  *  options arrive in later phases. */
@@ -26,6 +27,7 @@ export function SettingsView() {
         </div>
         <ProviderSettings />
         <ModelConsole />
+        <ModelDebug />
       </section>
     </div>
   );

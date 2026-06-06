@@ -38,6 +38,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info,
             model::commands::model_run,
+            model::commands::model_status,
             settings::get_model_config,
             settings::set_model_config,
             projects::create_project,

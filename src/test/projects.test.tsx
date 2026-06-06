@@ -50,6 +50,16 @@ vi.mock("@tauri-apps/api/core", () => ({
         }
         return false;
       }
+      case "model_status":
+        return {
+          provider: "claude",
+          available: true,
+          version: "test",
+          reason: null,
+          command: "claude --version",
+          exit_code: 0,
+          stderr: "",
+        };
       case "get_model_config":
         return { provider: "claude", local_endpoint: null, api_credit_overflow: false };
       case "set_model_config":

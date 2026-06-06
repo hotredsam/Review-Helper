@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { ProviderKind } from "./settings";
 
 export type UnavailableReason =
   | "not_installed"
@@ -25,4 +26,20 @@ export function runModel(prompt: string, sessionId?: string | null): Promise<voi
 /** Subscribe to streamed model events. Returns an unlisten function. */
 export function onModelEvent(handler: (e: ModelEvent) => void): Promise<UnlistenFn> {
   return listen<ModelEvent>("model-event", (evt) => handler(evt.payload));
+}
+
+/** Mirrors the Rust `ModelStatus` — whether the active provider is usable, with
+ *  debug detail (probe command, exit code, stderr). */
+export interface ModelStatus {
+  provider: ProviderKind;
+  available: boolean;
+  version: string | null;
+  reason: UnavailableReason | null;
+  command: string;
+  exit_code: number | null;
+  stderr: string;
+}
+
+export function getModelStatus(): Promise<ModelStatus> {
+  return invoke<ModelStatus>("model_status");
 }
