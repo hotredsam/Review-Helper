@@ -3,6 +3,7 @@ import { EmptyState } from "./EmptyState";
 import { SettingsView } from "./SettingsView";
 import { RepoCache } from "./RepoCache";
 import { PlanPane } from "./PlanPane";
+import { StatePane } from "./StatePane";
 import { sectionById } from "../nav/sections";
 import { useUiStore } from "../store/uiStore";
 import { useProjectStore } from "../store/projectStore";
@@ -55,6 +56,8 @@ export function MainPane({ onNewProject }: Props) {
       <div className="flex-1 overflow-auto">
         {section.id === "settings" ? (
           <SettingsView />
+        ) : section.id === "overview" && active ? (
+          <StatePane project={active} />
         ) : section.id === "plan" && active ? (
           <PlanPane project={active} />
         ) : (

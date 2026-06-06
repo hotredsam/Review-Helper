@@ -11,7 +11,9 @@ import type { Project } from "../api/projects";
 export function PlanPane({ project }: { project: Project }) {
   const plan = usePlanStore((s) => s.plans[project.id]);
   const analysis = usePlanStore((s) => s.analysis[project.id] ?? "idle");
-  const progress = usePlanStore((s) => s.progress[project.id] ?? []);
+  // Raw value (stable ref); default outside the selector to avoid an infinite
+  // re-render loop from a fresh [] each render.
+  const progressRaw = usePlanStore((s) => s.progress[project.id]);
   const error = usePlanStore((s) => s.error[project.id]);
   const loadPlan = usePlanStore((s) => s.loadPlan);
   const analyze = usePlanStore((s) => s.analyze);
@@ -29,7 +31,7 @@ export function PlanPane({ project }: { project: Project }) {
   const linked = !!project.github_repo_url;
 
   if (analysis === "running") {
-    const recent = progress.slice(-4).join(" · ");
+    const recent = (progressRaw ?? []).slice(-4).join(" · ");
     return (
       <Center>
         <Loader2 className="h-7 w-7 animate-spin text-accent" />

@@ -52,6 +52,8 @@ vi.mock("@tauri-apps/api/core", () => ({
       }
       case "github_status":
         return { connected: false, login: null };
+      case "get_assessment":
+        return null;
       case "model_status":
         return {
           provider: "claude",
