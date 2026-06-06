@@ -1,5 +1,5 @@
 # Phase 4 — Repo analysis & cold start
-Status: not started
+Status: done
 Goal: Turn an attached repo into a solid first plan; seed a blank project from a prompt.
 Depends on: Phase 2, Phase 3
 

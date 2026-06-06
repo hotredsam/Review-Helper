@@ -4,7 +4,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 
 ## Current state
 
-**Phases 1–3 are done; Phase 4 is current.** The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
+**Phases 1–4 are done; Phase 5 is current.** The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
 
 ## How to execute
 
@@ -37,7 +37,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 | 1 | `phases/phase-01-shell.md` — project scaffold & app shell | done |
 | 2 | `phases/phase-02-model-provider.md` — model provider & Claude availability | done |
 | 3 | `phases/phase-03-projects-github.md` — projects & GitHub connect | done |
-| 4 | `phases/phase-04-analysis-coldstart.md` — repo analysis & cold start | not started |
+| 4 | `phases/phase-04-analysis-coldstart.md` — repo analysis & cold start | done |
 | 5 | `phases/phase-05-assessment.md` — assessment engine & State pane | not started |
 | 6 | `phases/phase-06-understand-hub.md` — the Understand hub | not started |
 | 7 | `phases/phase-07-grill.md` — grill-me cards & detail coverage | not started |
