@@ -137,15 +137,11 @@ fn generate_plan(app: AppHandle, project_id: i64, req: ModelRequest, source: &st
         Ok(mut m) => m.entry(project_id).or_default().clone(),
         Err(e) => return emit(AnalysisEvent::Failed { project_id, detail: e.to_string() }),
     };
-    let _plan_guard = match plock.lock() {
-        Ok(g) => g,
-        Err(_) => {
-            return emit(AnalysisEvent::Failed {
-                project_id,
-                detail: "plan generation is locked (a prior run failed)".into(),
-            })
-        }
-    };
+    // Recover from poisoning: a prior run that panicked while holding the gate
+    // would otherwise lock out all future plan generation for this project. The
+    // gate guards only version-creation serialization (its `()` carries no
+    // invariant), so reusing the poisoned guard is safe; spawn_guarded is the net.
+    let _plan_guard = plock.lock().unwrap_or_else(|e| e.into_inner());
 
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;
@@ -299,15 +295,11 @@ fn run_merge(app: AppHandle, project_id: i64, req: ModelRequest, feature_ids: Ve
         Ok(mut m) => m.entry(project_id).or_default().clone(),
         Err(e) => return emit(AnalysisEvent::Failed { project_id, detail: e.to_string() }),
     };
-    let _plan_guard = match plock.lock() {
-        Ok(g) => g,
-        Err(_) => {
-            return emit(AnalysisEvent::Failed {
-                project_id,
-                detail: "plan generation is locked (a prior run failed)".into(),
-            })
-        }
-    };
+    // Recover from poisoning: a prior run that panicked while holding the gate
+    // would otherwise lock out all future plan generation for this project. The
+    // gate guards only version-creation serialization (its `()` carries no
+    // invariant), so reusing the poisoned guard is safe; spawn_guarded is the net.
+    let _plan_guard = plock.lock().unwrap_or_else(|e| e.into_inner());
 
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;

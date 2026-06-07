@@ -69,15 +69,11 @@ fn run_grill(app: AppHandle, project_id: i64, depth: i64) {
         };
         map.entry(project_id).or_default().clone()
     };
-    let _guard = match plock.lock() {
-        Ok(g) => g,
-        Err(_) => {
-            return emit(GrillEvent::Failed {
-                project_id,
-                detail: "grill generation lock poisoned".into(),
-            })
-        }
-    };
+    // Recover from poisoning: a prior run that panicked while holding this gate
+    // would otherwise brick grilling for this project until app restart. The
+    // gate guards only serialization (its `()` payload carries no invariant), so
+    // reusing the poisoned guard is safe; spawn_guarded remains the panic net.
+    let _guard = plock.lock().unwrap_or_else(|e| e.into_inner());
 
     // Pick uncovered topics + assemble grounding context under one lock, then
     // release it before the (slow) model call.
@@ -202,6 +198,24 @@ pub fn grill_delete(db: State<'_, Db>, project_id: i64, question_id: i64) -> Res
 mod tests {
     use super::super::generate::bank;
     use super::*;
+
+    #[test]
+    fn poisoned_gate_lock_still_acquires() {
+        // The per-project gate is an Arc<Mutex<()>>. Poison it the same way a
+        // panic mid-run would (drop the guard during an unwind), then assert the
+        // recovery pattern used at every gate-acquisition site still proceeds —
+        // so one crashed run can't brick the project until restart.
+        let lock = Arc::new(Mutex::new(()));
+        let l2 = lock.clone();
+        let _ = std::thread::spawn(move || {
+            let _g = l2.lock().unwrap();
+            panic!("boom while holding the gate");
+        })
+        .join();
+        assert!(lock.is_poisoned(), "the gate mutex is poisoned after the panic");
+        // unwrap_or_else(into_inner) recovers instead of erroring.
+        let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+    }
 
     #[test]
     #[ignore = "runs a real model question-generation on a tiny repo; needs auth + uses credits. Run: cargo test -- --ignored"]

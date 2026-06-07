@@ -57,3 +57,18 @@ body {
   color: var(--fg);
   transition: background-color 0.2s ease, color 0.2s ease;
 }
+
+/*
+ * App-wide keyboard focus affordance for every button/link. Uses :focus-visible
+ * (so mouse clicks don't draw a ring) and the themed --ring token (works in all
+ * four themes). One global rule guarantees no button ships without a focus
+ * indicator — WCAG 2.4.7 — without hand-decorating ~60 buttons; inputs/textareas
+ * keep their own Tailwind rings, and components may add focus-visible:ring on top.
+ */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[role="option"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

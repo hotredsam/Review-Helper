@@ -106,7 +106,11 @@ fn approve_in_tx(tx: &Connection, project_id: i64, suggestion_id: i64) -> Result
         .optional()
         .map_err(|e| e.to_string())?
         .ok_or("Suggestion not found or already handled.")?;
-    let p: Value = serde_json::from_str(&payload).unwrap_or(Value::Null);
+    // A corrupt/tampered stored payload must abort the approval (rolling back the
+    // transaction), not silently insert blank topic/choice/title/answer fields —
+    // nothing reaches the record silently.
+    let p: Value = serde_json::from_str(&payload)
+        .map_err(|e| format!("Suggestion payload is corrupt and was not approved: {e}"))?;
 
     match kind.as_str() {
         "decision" => {
@@ -336,6 +340,24 @@ mod tests {
         assert_eq!(list(&conn, pid, None).unwrap().len(), 2, "None returns all rows");
         assert_eq!(list(&conn, pid, Some("pending")).unwrap().len(), 1);
         assert_eq!(list(&conn, pid, Some("dismissed")).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn approve_rejects_corrupt_payload_and_writes_nothing() {
+        let mut conn = db();
+        let pid = project(&conn);
+        // Bypass save()'s validation to simulate a corrupt/tampered stored row.
+        conn.execute(
+            "INSERT INTO suggestions (project_id, kind, payload, status) VALUES (?1, 'decision', ?2, 'pending')",
+            params![pid, "{not valid json"],
+        )
+        .unwrap();
+        let sid = conn.last_insert_rowid();
+
+        assert!(approve(&mut conn, pid, sid).is_err(), "corrupt payload is rejected");
+        // Transaction rolled back: nothing written, suggestion still pending.
+        assert_eq!(count(&conn, "SELECT count(*) FROM decisions"), 0, "no blank decision written");
+        assert_eq!(list(&conn, pid, Some("pending")).unwrap().len(), 1, "still pending");
     }
 
     fn count(conn: &Connection, sql: &str) -> i64 {

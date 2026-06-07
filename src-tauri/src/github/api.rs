@@ -434,6 +434,11 @@ pub fn delete_file(owner: &str, repo: &str, path: &str, sha: &str, message: &str
         .json(&serde_json::json!({ "message": message, "sha": sha, "branch": branch }))
         .send()
         .map_err(|e| e.to_string())?;
+    // SHA mismatch — the file changed on GitHub since the preview. Give the same
+    // actionable, re-preview message put_file already returns.
+    if resp.status().as_u16() == 409 {
+        return Err(format!("'{path}' was modified on GitHub since the preview — re-preview and try again."));
+    }
     // 404 = already gone — treat as success so a re-run can make progress.
     if resp.status().as_u16() != 404 && !resp.status().is_success() {
         return Err(status_error(resp.status()));

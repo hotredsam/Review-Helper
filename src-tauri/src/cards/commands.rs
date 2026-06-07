@@ -64,7 +64,9 @@ pub fn card_explain(db: State<'_, Db>, gate: State<'_, CardGate>, term: String) 
         let mut map = gate.0.lock().map_err(|e| e.to_string())?;
         map.entry(key).or_default().clone()
     };
-    let _guard = term_lock.lock().map_err(|_| "card generation lock poisoned".to_string())?;
+    // Recover from poisoning (a prior panic while held) so one crash doesn't
+    // brick explaining this term forever; the gate's `()` carries no invariant.
+    let _guard = term_lock.lock().unwrap_or_else(|e| e.into_inner());
 
     // Re-check under the gate: another caller may have just generated it.
     let existing_source = {
