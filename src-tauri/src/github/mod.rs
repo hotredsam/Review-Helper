@@ -13,9 +13,15 @@ pub mod device;
 pub mod keychain;
 
 /// Shared blocking HTTP client. GitHub requires a User-Agent header.
+///
+/// Timeouts are mandatory: without them a hung GitHub call would block its
+/// thread forever, and any call made under the DB lock would freeze the whole
+/// app. 10s to connect, 30s overall caps the worst case.
 pub(crate) fn http_client() -> Result<reqwest::blocking::Client, String> {
     reqwest::blocking::Client::builder()
         .user_agent("review-helper")
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())
 }

@@ -31,8 +31,11 @@ pub fn sync_main_preview(db: State<'_, Db>, project_id: i64) -> Result<SyncPrevi
 
 /// Apply the confirmed preview (push docs + replay issue actions + delete the
 /// shown files). The exact `preview` the user confirmed is passed back in.
+///
+/// `apply_main_sync` takes the `Db` itself (not a held lock) so the DB mutex is
+/// only locked for the brief reads/writes around the GitHub network I/O, never
+/// across it — a slow or hung sync can't freeze the rest of the app.
 #[tauri::command]
 pub fn sync_main_apply(db: State<'_, Db>, project_id: i64, preview: SyncPreview) -> Result<SyncResult, String> {
-    let mut conn = db.0.lock().map_err(|e| e.to_string())?;
-    apply_main_sync(&mut conn, project_id, preview)
+    apply_main_sync(db.inner(), project_id, preview)
 }

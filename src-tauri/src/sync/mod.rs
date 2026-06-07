@@ -262,10 +262,20 @@ pub fn preview_main_sync(conn: &Connection, project_id: i64) -> Result<SyncPrevi
 /// Apply the CONFIRMED preview: push the package, replay the exact issue actions
 /// the user saw, and delete exactly the files shown. Re-runs/partials are safe
 /// (idempotent); failures are collected, not silently swallowed.
-pub fn apply_main_sync(conn: &mut Connection, project_id: i64, preview: SyncPreview) -> Result<SyncResult, String> {
-    let (owner, repo, default_branch) = owner_repo(conn, project_id)?;
-    let version = latest_version(conn, project_id)?.ok_or("No plan to sync.")?;
-    let files = package(conn, project_id)?;
+///
+/// Takes the `Db` (not a held connection) on purpose: the global DB mutex is
+/// locked only for the brief reads up front and the issue-number write at the
+/// end — never across the slow GitHub network I/O in between, so a sync (or a
+/// hung request) can't freeze the rest of the app.
+pub fn apply_main_sync(db: &crate::db::Db, project_id: i64, preview: SyncPreview) -> Result<SyncResult, String> {
+    // Read everything the network phase needs under a short lock, then drop it.
+    let (owner, repo, default_branch, version, files) = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let (owner, repo, default_branch) = owner_repo(&conn, project_id)?;
+        let version = latest_version(&conn, project_id)?.ok_or("No plan to sync.")?;
+        let files = package(&conn, project_id)?;
+        (owner, repo, default_branch, version, files)
+    };
     if files.is_empty() {
         return Err("No plan to sync yet — analyze or kick off a plan first.".into());
     }
@@ -302,19 +312,32 @@ pub fn apply_main_sync(conn: &mut Connection, project_id: i64, preview: SyncPrev
                 }
             }
             IssueAction::Update { number, marker, title, body, state, labels } => {
+                if *number == 0 {
+                    failures.push(format!("update '{title}': invalid issue number 0, skipped"));
+                    continue;
+                }
                 let lab: Vec<&str> = labels.iter().map(String::as_str).collect();
                 match crate::github::api::update_issue(&owner, &repo, *number, title, body, state, &lab) {
                     Ok(()) => { recorded.push((marker.clone(), *number)); issues_applied += 1; }
                     Err(e) => failures.push(format!("update #{number}: {e}")),
                 }
             }
-            IssueAction::Close { number, .. } => match crate::github::api::close_issue(&owner, &repo, *number) {
-                Ok(()) => issues_applied += 1,
-                Err(e) => failures.push(format!("close #{number}: {e}")),
-            },
+            IssueAction::Close { number, .. } => {
+                if *number == 0 {
+                    failures.push("close: invalid issue number 0, skipped".into());
+                    continue;
+                }
+                match crate::github::api::close_issue(&owner, &repo, *number) {
+                    Ok(()) => issues_applied += 1,
+                    Err(e) => failures.push(format!("close #{number}: {e}")),
+                }
+            }
         }
     }
     if !recorded.is_empty() {
+        // Re-acquire the lock only for this short write — never held during the
+        // network calls above.
+        let mut conn = db.0.lock().map_err(|e| e.to_string())?;
         let tx = conn.transaction().map_err(|e| e.to_string())?;
         for (marker, number) in &recorded {
             tx.execute(
@@ -334,7 +357,10 @@ pub fn apply_main_sync(conn: &mut Connection, project_id: i64, preview: SyncPrev
                 Ok(()) => files_deleted += 1,
                 Err(e) => failures.push(format!("delete {path}: {e}")),
             },
-            None => files_deleted += 1, // already gone
+            // The preview saw this file, but it's gone now (concurrent change or
+            // a prior partial apply). The end state is correct, but surface it
+            // rather than silently counting a delete that didn't happen.
+            None => failures.push(format!("delete {path}: already absent on GitHub, skipped")),
         }
     }
 

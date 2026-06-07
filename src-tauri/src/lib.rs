@@ -46,8 +46,22 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Open + migrate the SQLite database, then hand the connection to
-            // Tauri's managed state so every command can reach it.
-            let conn = db::connect_app_db(app.handle())?;
+            // Tauri's managed state so every command can reach it. A failure
+            // here (corrupt file, unwritable app-data dir, full disk) is fatal,
+            // but we log a clear, actionable reason before aborting rather than
+            // letting a bare `?` bubble into an opaque panic.
+            let conn = match db::connect_app_db(app.handle()) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!(
+                        "Review Helper: could not open its database: {e}\n\
+                         The app-data folder may be unwritable, the disk full, or \
+                         the database file corrupt. Check folder permissions and \
+                         free disk space, then relaunch."
+                    );
+                    return Err(e);
+                }
+            };
             let _ = cards::seed(&conn); // best-effort seed of the curated cards
             app.manage(db::Db(Mutex::new(conn)));
             app.manage(cards::commands::CardGate::default());
@@ -117,7 +131,11 @@ pub fn run() {
             projects::delete_project,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .unwrap_or_else(|e| {
+            // A clear, logged exit beats an opaque panic backtrace for the user.
+            eprintln!("Review Helper: fatal error while running: {e}");
+            std::process::exit(1);
+        });
 }
 
 #[cfg(test)]

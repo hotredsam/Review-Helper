@@ -41,7 +41,37 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute_batch(SCHEMA)?;
         conn.pragma_update(None, "user_version", 1)?;
     }
+    if version < 2 {
+        migrate_v2(conn)?;
+        conn.pragma_update(None, "user_version", 2)?;
+    }
     Ok(())
+}
+
+/// v2: make `learning_cards.term` uniqueness case-insensitive, and add a
+/// project-leading answers index. SQLite cannot alter a UNIQUE constraint in
+/// place, so the term change is a table rebuild (cards have no inbound foreign
+/// keys, so this is safe). `INSERT OR IGNORE` collapses any pre-existing
+/// case-variant duplicates onto the oldest row. Fresh databases already carry
+/// the NOCASE constraint from `schema.sql`, so the rebuild is a harmless no-op
+/// there; everything here is idempotent.
+fn migrate_v2(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE learning_cards_new (
+           id INTEGER PRIMARY KEY, term TEXT NOT NULL,
+           domain TEXT CHECK (domain IN ('architecture','frontend','backend','pipes','deployment','business','design','ux','other')),
+           what_md TEXT, when_md TEXT, why_md TEXT,
+           source TEXT CHECK (source IN ('seed','detected','generated')),
+           created_at TEXT NOT NULL DEFAULT (datetime('now')),
+           UNIQUE (term COLLATE NOCASE)
+         );
+         INSERT OR IGNORE INTO learning_cards_new (id, term, domain, what_md, when_md, why_md, source, created_at)
+           SELECT id, term, domain, what_md, when_md, why_md, source, created_at
+           FROM learning_cards ORDER BY id;
+         DROP TABLE learning_cards;
+         ALTER TABLE learning_cards_new RENAME TO learning_cards;
+         CREATE INDEX IF NOT EXISTS idx_answers_project_question ON answers(project_id, question_id);",
+    )
 }
 
 #[cfg(test)]
@@ -85,7 +115,17 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
+    }
+
+    #[test]
+    fn learning_card_term_uniqueness_is_case_insensitive() {
+        let conn = migrated_memory_db();
+        conn.execute("INSERT INTO learning_cards (term, source) VALUES ('Foo', 'seed')", [])
+            .unwrap();
+        // A case-variant of an existing term collides — no duplicate card.
+        let dup = conn.execute("INSERT INTO learning_cards (term, source) VALUES ('foo', 'seed')", []);
+        assert!(dup.is_err(), "'foo' must collide with 'Foo' under NOCASE uniqueness");
     }
 
     #[test]

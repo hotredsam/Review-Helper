@@ -3,6 +3,7 @@ import { Loader2, Play, Sparkles, AlertTriangle } from "lucide-react";
 import { usePlanStore, ensureAnalysisListener } from "../store/planStore";
 import { WhyExplain } from "./WhyExplain";
 import { SyncPanel } from "./SyncPanel";
+import { Modal } from "./Modal";
 import type { Project } from "../api/projects";
 
 /**
@@ -26,6 +27,7 @@ export function PlanPane({ project }: { project: Project }) {
   const auditRaw = usePlanStore((s) => s.audit[project.id]);
   const audit = auditRaw ?? [];
   const [desc, setDesc] = useState("");
+  const [rebuildOpen, setRebuildOpen] = useState(false);
 
   useEffect(() => {
     ensureAnalysisListener();
@@ -37,14 +39,9 @@ export function PlanPane({ project }: { project: Project }) {
     void loadAudit(project.id);
   }, [project.id, loadAudit]);
 
-  const onRebuild = () => {
-    if (
-      window.confirm(
-        "Rebuild regenerates the plan from scratch: phase completion is reset to not-started, and pending inbox ideas are NOT incorporated. Use “Update plan” instead to keep your progress and weave in ideas. Rebuild anyway?",
-      )
-    ) {
-      void rebuild(project.id);
-    }
+  const confirmRebuild = () => {
+    setRebuildOpen(false);
+    void rebuild(project.id);
   };
 
   const cloned = !!project.clone_path;
@@ -231,12 +228,38 @@ export function PlanPane({ project }: { project: Project }) {
         )}
         <button
           type="button"
-          onClick={onRebuild}
+          onClick={() => setRebuildOpen(true)}
           className="rounded-md border border-danger/40 px-3 py-1.5 text-xs text-danger hover:bg-danger/10"
         >
           Rebuild plan
         </button>
       </div>
+
+      <Modal open={rebuildOpen} onClose={() => setRebuildOpen(false)} title="Rebuild plan?">
+        <p className="text-sm text-fg-muted">
+          Rebuild regenerates the plan from scratch: phase completion is reset to{" "}
+          <span className="font-medium text-fg">not-started</span>, and pending inbox ideas are{" "}
+          <span className="font-medium text-fg">not</span> incorporated. Use{" "}
+          <span className="font-medium text-fg">Update plan</span> instead to keep your progress and
+          weave in ideas.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setRebuildOpen(false)}
+            className="rounded-md border border-border px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-2"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={confirmRebuild}
+            className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-danger-fg hover:opacity-90"
+          >
+            Rebuild plan
+          </button>
+        </div>
+      </Modal>
 
       {audit.length > 0 && (
         <section className="space-y-1 pt-2">

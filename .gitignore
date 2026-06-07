@@ -39,3 +39,7 @@ credentials
 *.sqlite
 *.sqlite3
 *.db
+
+# --- Stray debug/scratch binaries (never sign or notarize these) ---
+/test_bug
+/test-utf8-slicing

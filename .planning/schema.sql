@@ -81,7 +81,9 @@ CREATE TABLE learning_cards (
   what_md TEXT, when_md TEXT, why_md TEXT,
   source TEXT CHECK (source IN ('seed','detected','generated')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (term)
+  -- Case-insensitive: lookups are case-insensitive, so "Foo" and "foo" must
+  -- be the same card, not two duplicates.
+  UNIQUE (term COLLATE NOCASE)
 );
 CREATE TABLE suggestions (
   id INTEGER PRIMARY KEY,
@@ -97,4 +99,5 @@ CREATE INDEX idx_decisions_project ON decisions(project_id, status);
 CREATE INDEX idx_questions_project ON questions(project_id, status);
 CREATE INDEX idx_features_project ON features(project_id, status);
 CREATE INDEX idx_answers_question_project ON answers(question_id, project_id);
+CREATE INDEX idx_answers_project_question ON answers(project_id, question_id);
 CREATE INDEX idx_suggestions_project_status ON suggestions(project_id, status);
