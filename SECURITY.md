@@ -16,10 +16,12 @@
 - **Nothing reaches the record or GitHub silently.** Chat-inferred changes are
   pending suggestions the user approves; GitHub closes/deletions happen only
   after a confirmed preview (`SyncPanel`), and the sync is idempotent.
-- **Prompt-injection defense-in-depth.** Untrusted clones are scanned without
-  following symlinks out of the clone; the `ProjectContext` bundle is marked as
-  DATA (not instructions); generated cards/questions/suggestions are validated
-  and length-bounded before they are persisted.
+- **Prompt-injection defense-in-depth.** The real controls are structural: the
+  model is read-only (no write/commit), untrusted clones are scanned without
+  following symlinks out of the clone, and generated cards/questions/suggestions
+  are structurally validated + length-bounded before they are persisted. On top
+  of that, the `ProjectContext` bundle marks recorded state as untrusted DATA and
+  backtick-delimits each value — an advisory behavioral hint, not a hard control.
 
 ## Dependencies (all permissive licenses, justified)
 Rust (`src-tauri/Cargo.toml`):

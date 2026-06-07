@@ -2,8 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <!-- Hardened-runtime entitlements for the WKWebView + outbound HTTPS
-       (GitHub API, the claude CLI). Required to pass notarization. -->
+  <!-- Hardened-runtime entitlements for the WKWebView JIT + outbound HTTPS
+       (GitHub API, the claude CLI). Verify the minimal set during the
+       notarize+launch run (T3b): drop allow-unsigned-executable-memory if the
+       app still launches and notarizes without it. -->
   <key>com.apple.security.cs.allow-jit</key>
   <true/>
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key>

@@ -10,21 +10,32 @@ certificate), which can't be committed.
    certificate and install it in your login keychain.
 2. Create an app-specific password for your Apple ID (appleid.apple.com).
 
-## Build + notarize
-Set these env vars, then run the bundler — Tauri signs with the hardened runtime
-(`src-tauri/entitlements.plist`) and submits for notarization:
+## Step 1 — code-sign (Tauri)
+Set the signing identity, then build. Tauri **code-signs** the `.app` with the
+hardened runtime (`src-tauri/entitlements.plist`). It does **NOT** notarize.
 
 ```sh
 export APPLE_SIGNING_IDENTITY="Developer ID Application: <Your Name> (<TEAMID>)"
-export APPLE_ID="you@example.com"
-export APPLE_PASSWORD="<app-specific-password>"
-export APPLE_TEAM_ID="<TEAMID>"
-
 npm run tauri build
 ```
 
-The signed, notarized artifacts land in
+The signed (un-notarized) artifacts land in
 `src-tauri/target/release/bundle/{macos,dmg}/`.
+
+## Step 2 — notarize + staple (manual)
+Submit the build to Apple, wait for approval, then staple the ticket so it
+passes Gatekeeper offline:
+
+```sh
+APP="src-tauri/target/release/bundle/macos/Review Helper.app"
+ditto -c -k --keepParent "$APP" /tmp/ReviewHelper.zip   # notarytool wants an archive
+xcrun notarytool submit /tmp/ReviewHelper.zip \
+  --apple-id "you@example.com" \
+  --password "<app-specific-password>" \
+  --team-id "<TEAMID>" \
+  --wait
+xcrun stapler staple "$APP"
+```
 
 ## Verify (on a clean Mac)
 ```sh

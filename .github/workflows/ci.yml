@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +35,13 @@ jobs:
 
       # Backend unit tests (excludes #[ignore] real-model/keychain tests that
       # need credentials). Covers the model providers, structured-proposal
-      # parsing, plan-merge status preservation, and issue matching.
+      # parsing, plan-merge status preservation, and issue matching. The
+      # app_info command is a build-health unit test, not a UI/bridge smoke test.
       - name: Backend tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+      # Validate the Tauri backend + config compile (catches plugin/config
+      # errors). Does NOT bundle, sign, or notarize — those need credentials
+      # and run locally per RELEASE.md.
+      - name: Build backend (config validation)
+        run: cargo build --manifest-path src-tauri/Cargo.toml
