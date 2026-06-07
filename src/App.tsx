@@ -57,6 +57,28 @@ function App() {
       </div>
       <NewProjectDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
       {tourOpen && <Tour onClose={() => setTourOpen(false)} />}
+      <NoticeBar />
+    </div>
+  );
+}
+
+/** Transient confirmation toast (aria-live), auto-clears after a moment. */
+function NoticeBar() {
+  const notice = useUiStore((s) => s.notice);
+  const setNotice = useUiStore((s) => s.setNotice);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 2500);
+    return () => clearTimeout(t);
+  }, [notice, setNotice]);
+  if (!notice) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-4 left-1/2 z-[70] -translate-x-1/2 rounded-lg border border-border bg-surface px-4 py-2 text-sm text-fg shadow-lg"
+    >
+      {notice}
     </div>
   );
 }

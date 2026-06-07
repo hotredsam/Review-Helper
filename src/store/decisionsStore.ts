@@ -7,6 +7,9 @@ import {
   type Suggestion,
 } from "../api/suggestions";
 import { decisionsList, decisionSupersede, type Decision } from "../api/decisions";
+import { useUiStore } from "./uiStore";
+
+const notify = (msg: string) => useUiStore.getState().setNotice(msg);
 
 interface DecisionsStore {
   pending: Record<number, Suggestion[] | undefined>;
@@ -51,6 +54,7 @@ export const useDecisionsStore = create<DecisionsStore>((set, get) => ({
       await suggestionApprove(id, suggestionId);
       await get().loadPending(id);
       await get().loadDecisions(id);
+      notify("Suggestion approved.");
     } catch (e) {
       set((s) => ({ error: { ...s.error, [id]: String(e) } }));
     }
@@ -60,6 +64,7 @@ export const useDecisionsStore = create<DecisionsStore>((set, get) => ({
     try {
       await suggestionDismiss(id, suggestionId);
       await get().loadPending(id);
+      notify("Suggestion dismissed.");
     } catch (e) {
       set((s) => ({ error: { ...s.error, [id]: String(e) } }));
     }
@@ -70,6 +75,7 @@ export const useDecisionsStore = create<DecisionsStore>((set, get) => ({
       await suggestionsApproveAll(id);
       await get().loadPending(id);
       await get().loadDecisions(id);
+      notify("All suggestions approved.");
     } catch (e) {
       set((s) => ({ error: { ...s.error, [id]: String(e) } }));
     }

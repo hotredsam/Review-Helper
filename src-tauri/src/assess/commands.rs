@@ -36,7 +36,11 @@ pub fn assess_project(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Res
     // All heavy work (scan + model) happens off the IPC thread so the command
     // returns instantly and every failure flows through one channel (events).
     let app = app.clone();
-    std::thread::spawn(move || run_assessment(app, project_id, clone_path));
+    let report = app.clone();
+    crate::util::spawn_guarded(
+        move || run_assessment(app, project_id, clone_path),
+        move || { let _ = report.emit("assessment-event", &AssessmentEvent::Failed { project_id, detail: "Assessment crashed unexpectedly.".into() }); },
+    );
     Ok(())
 }
 

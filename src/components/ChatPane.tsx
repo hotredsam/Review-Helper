@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Loader2, Send, MessagesSquare, Lightbulb } from "lucide-react";
+import { Loader2, Send, MessagesSquare, Lightbulb, Check, X } from "lucide-react";
 import { useChatStore, ensureChatListener, type Message } from "../store/chatStore";
+import { useDecisionsStore } from "../store/decisionsStore";
 import type { Suggestion } from "../api/suggestions";
 import type { Project } from "../api/projects";
 
@@ -36,6 +37,14 @@ export function ChatPane({ project }: { project: Project }) {
   const loadPending = useChatStore((s) => s.loadPending);
   const pendingRaw = useChatStore((s) => s.pending[id]);
   const pending = pendingRaw ?? EMPTY_SUG;
+  const approveSuggestion = useDecisionsStore((s) => s.approve);
+  const dismissSuggestion = useDecisionsStore((s) => s.dismiss);
+
+  // Approve/dismiss in context, then refresh the chat's pending view.
+  const act = async (fn: (id: number, sid: number) => Promise<void>, sid: number) => {
+    await fn(id, sid);
+    await loadPending(id);
+  };
 
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -93,16 +102,35 @@ export function ChatPane({ project }: { project: Project }) {
             <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
               Pending suggestions
             </h3>
-            <span className="text-xs text-fg-subtle">— you'll approve these soon</span>
+            <span className="text-xs text-fg-subtle">— approve or dismiss</span>
           </div>
-          <ul className="flex flex-wrap gap-1.5" aria-label="Pending suggestion list">
+          <ul className="space-y-1" aria-label="Pending suggestion list">
             {pending.map((s) => (
-              <li
-                key={s.id}
-                className="flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-fg-muted"
-              >
-                <span className="font-medium capitalize text-fg-subtle">{s.kind}</span>
-                <span className="truncate">{summarize(s)}</span>
+              <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 truncate">
+                  <span className="mr-2 rounded-full bg-surface-2 px-2 py-0.5 text-xs capitalize text-fg-muted">
+                    {s.kind}
+                  </span>
+                  {summarize(s)}
+                </span>
+                <span className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void act(approveSuggestion, s.id)}
+                    aria-label={`Approve ${s.kind}`}
+                    className="flex items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-fg hover:bg-accent-hover"
+                  >
+                    <Check className="h-3 w-3" /> Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void act(dismissSuggestion, s.id)}
+                    aria-label={`Dismiss ${s.kind}`}
+                    className="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-fg-muted hover:bg-surface-2"
+                  >
+                    <X className="h-3 w-3" /> Dismiss
+                  </button>
+                </span>
               </li>
             ))}
           </ul>

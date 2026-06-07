@@ -1,6 +1,9 @@
 //! Plan commands: analyze a clone (read-only) or kick off a blank project from a
 //! description, both into a first persisted plan with streamed progress.
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -11,6 +14,12 @@ use crate::model::claude::ClaudeCodeProvider;
 use crate::model::{ModelEvent, ModelProvider, ModelRequest};
 use crate::plan::{ingest, parse, prompts, store};
 use crate::projects;
+
+/// Per-project gate serializing plan-version creation, so two concurrent
+/// analyze/kickoff/update/rebuild runs can't both read MAX(version) and collide
+/// on the UNIQUE(project_id, version) constraint (mirrors CardGate/GrillGate).
+#[derive(Default)]
+pub struct PlanGate(pub Mutex<HashMap<i64, Arc<Mutex<()>>>>);
 
 /// Streamed plan-generation progress (channel: `analysis-event`).
 #[derive(Serialize, Clone)]
@@ -58,7 +67,11 @@ pub fn analyze_project(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Re
     req.cwd = Some(clone_path);
 
     let app = app.clone();
-    std::thread::spawn(move || generate_plan(app, project_id, req, "analyze"));
+    let report = app.clone();
+    crate::util::spawn_guarded(
+        move || generate_plan(app, project_id, req, "analyze"),
+        move || { let _ = report.emit("analysis-event", &AnalysisEvent::Failed { project_id, detail: "Analysis crashed unexpectedly.".into() }); },
+    );
     Ok(())
 }
 
@@ -85,7 +98,11 @@ pub fn kickoff_project(
     // No cwd: there is no repo to read.
 
     let app = app.clone();
-    std::thread::spawn(move || generate_plan(app, project_id, req, "kickoff"));
+    let report = app.clone();
+    crate::util::spawn_guarded(
+        move || generate_plan(app, project_id, req, "kickoff"),
+        move || { let _ = report.emit("analysis-event", &AnalysisEvent::Failed { project_id, detail: "Plan generation crashed unexpectedly.".into() }); },
+    );
     Ok(())
 }
 
@@ -113,6 +130,22 @@ fn generate_plan(app: AppHandle, project_id: i64, req: ModelRequest, source: &st
         let _ = app.emit("analysis-event", &ev);
     };
     emit(AnalysisEvent::Started { project_id });
+
+    // Serialize version creation per project (no MAX(version) collision).
+    let gate = app.state::<PlanGate>();
+    let plock = match gate.0.lock() {
+        Ok(mut m) => m.entry(project_id).or_default().clone(),
+        Err(e) => return emit(AnalysisEvent::Failed { project_id, detail: e.to_string() }),
+    };
+    let _plan_guard = match plock.lock() {
+        Ok(g) => g,
+        Err(_) => {
+            return emit(AnalysisEvent::Failed {
+                project_id,
+                detail: "plan generation is locked (a prior run failed)".into(),
+            })
+        }
+    };
 
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;
@@ -244,7 +277,11 @@ pub fn update_plan(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Result
     };
 
     let app = app.clone();
-    std::thread::spawn(move || run_merge(app, project_id, req, feature_ids));
+    let report = app.clone();
+    crate::util::spawn_guarded(
+        move || run_merge(app, project_id, req, feature_ids),
+        move || { let _ = report.emit("analysis-event", &AnalysisEvent::Failed { project_id, detail: "Plan update crashed unexpectedly.".into() }); },
+    );
     Ok(())
 }
 
@@ -255,6 +292,22 @@ fn run_merge(app: AppHandle, project_id: i64, req: ModelRequest, feature_ids: Ve
         let _ = app.emit("analysis-event", &ev);
     };
     emit(AnalysisEvent::Started { project_id });
+
+    // Serialize version creation per project (no MAX(version) collision).
+    let gate = app.state::<PlanGate>();
+    let plock = match gate.0.lock() {
+        Ok(mut m) => m.entry(project_id).or_default().clone(),
+        Err(e) => return emit(AnalysisEvent::Failed { project_id, detail: e.to_string() }),
+    };
+    let _plan_guard = match plock.lock() {
+        Ok(g) => g,
+        Err(_) => {
+            return emit(AnalysisEvent::Failed {
+                project_id,
+                detail: "plan generation is locked (a prior run failed)".into(),
+            })
+        }
+    };
 
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;
@@ -327,7 +380,11 @@ pub fn rebuild_plan(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Resul
         }
     };
     let app = app.clone();
-    std::thread::spawn(move || generate_plan(app, project_id, req, "rebuild"));
+    let report = app.clone();
+    crate::util::spawn_guarded(
+        move || generate_plan(app, project_id, req, "rebuild"),
+        move || { let _ = report.emit("analysis-event", &AnalysisEvent::Failed { project_id, detail: "Plan rebuild crashed unexpectedly.".into() }); },
+    );
     Ok(())
 }
 

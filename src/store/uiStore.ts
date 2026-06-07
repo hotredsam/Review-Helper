@@ -6,9 +6,11 @@ interface UiState {
   sidebarCollapsed: boolean;
   activeSection: SectionId;
   tourOpen: boolean; // ephemeral (not persisted)
+  notice: string | null; // ephemeral transient confirmation
   toggleSidebar: () => void;
   setSection: (id: SectionId) => void;
   setTourOpen: (open: boolean) => void;
+  setNotice: (msg: string | null) => void;
 }
 
 /**
@@ -21,9 +23,11 @@ export const useUiStore = create<UiState>()(
       sidebarCollapsed: false,
       activeSection: DEFAULT_SECTION,
       tourOpen: false,
+      notice: null,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSection: (id) => set({ activeSection: id }),
       setTourOpen: (open) => set({ tourOpen: open }),
+      setNotice: (msg) => set({ notice: msg }),
     }),
     {
       name: "review-helper.ui",

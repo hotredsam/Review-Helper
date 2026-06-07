@@ -96,3 +96,5 @@ CREATE INDEX idx_phases_project ON phases(project_id, plan_version, idx);
 CREATE INDEX idx_decisions_project ON decisions(project_id, status);
 CREATE INDEX idx_questions_project ON questions(project_id, status);
 CREATE INDEX idx_features_project ON features(project_id, status);
+CREATE INDEX idx_answers_question_project ON answers(question_id, project_id);
+CREATE INDEX idx_suggestions_project_status ON suggestions(project_id, status);

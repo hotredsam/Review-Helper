@@ -117,10 +117,17 @@ fn approve_in_tx(tx: &Connection, project_id: i64, suggestion_id: i64) -> Result
             crate::stack::apply_one(tx, project_id, &field(&p, "pane"), &field(&p, "choice"), "chat")?;
         }
         "answer" => {
-            let body = format!("{}\n{}", field(&p, "question"), field(&p, "answer"));
+            // Record the question + a LINKED answer, so ProjectContext (which
+            // JOINs answers on question_id) actually surfaces it on later turns.
             tx.execute(
-                "INSERT INTO answers (project_id, body, source) VALUES (?1, ?2, 'chat')",
-                params![project_id, body.trim()],
+                "INSERT INTO questions (project_id, text, status) VALUES (?1, ?2, 'answered')",
+                params![project_id, field(&p, "question")],
+            )
+            .map_err(|e| e.to_string())?;
+            let qid = tx.last_insert_rowid();
+            tx.execute(
+                "INSERT INTO answers (question_id, project_id, body, source) VALUES (?1, ?2, ?3, 'chat')",
+                params![qid, project_id, field(&p, "answer")],
             )
             .map_err(|e| e.to_string())?;
         }
@@ -333,6 +340,25 @@ mod tests {
 
         // re-approving a handled suggestion errors.
         assert!(approve(&mut conn, pid, ids[0]).is_err());
+    }
+
+    #[test]
+    fn approving_an_answer_links_it_so_context_surfaces_it() {
+        let mut conn = db();
+        let pid = project(&conn);
+        save(
+            &mut conn,
+            pid,
+            &[ParsedSuggestion { kind: "answer".into(), payload: r#"{"question":"Who is it for?","answer":"Solo builders."}"#.into() }],
+        )
+        .unwrap();
+        let sid = list(&conn, pid, Some("pending")).unwrap()[0].id;
+        approve(&mut conn, pid, sid).unwrap();
+        let ctx = crate::context::ProjectContext::assemble(&conn, pid).unwrap();
+        assert!(
+            ctx.answers.iter().any(|a| a.question == "Who is it for?" && a.answer == "Solo builders."),
+            "approved answer is question-linked and surfaced in the model context"
+        );
     }
 
     #[test]

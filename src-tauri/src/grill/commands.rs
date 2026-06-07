@@ -44,7 +44,11 @@ pub fn grill_generate(
         projects::get(&conn, project_id)?.ok_or("Project not found.")?;
     }
     let app = app.clone();
-    std::thread::spawn(move || run_grill(app, project_id, depth.clamp(1, 5)));
+    let report = app.clone();
+    crate::util::spawn_guarded(
+        move || run_grill(app, project_id, depth.clamp(1, 5)),
+        move || { let _ = report.emit("grill-event", &GrillEvent::Failed { project_id, detail: "Grilling crashed unexpectedly.".into() }); },
+    );
     Ok(())
 }
 

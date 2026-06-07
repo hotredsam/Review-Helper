@@ -18,6 +18,7 @@ mod projects;
 mod stack;
 mod suggestions;
 mod sync;
+mod util;
 #[cfg(test)]
 mod seed_real;
 mod settings;
@@ -51,6 +52,7 @@ pub fn run() {
             app.manage(db::Db(Mutex::new(conn)));
             app.manage(cards::commands::CardGate::default());
             app.manage(grill::commands::GrillGate::default());
+            app.manage(plan::commands::PlanGate::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

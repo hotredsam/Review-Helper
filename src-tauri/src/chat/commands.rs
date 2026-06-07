@@ -54,9 +54,16 @@ pub fn chat_send(
         (config, context, project.clone_path)
     };
     let app = app.clone();
-    std::thread::spawn(move || {
-        run_chat(app, project_id, message, session_id, config, context, clone_path)
-    });
+    let report = app.clone();
+    crate::util::spawn_guarded(
+        move || run_chat(app, project_id, message, session_id, config, context, clone_path),
+        move || {
+            let _ = report.emit(
+                "chat-event",
+                &ChatEvent::Failed { project_id, detail: "The chat crashed unexpectedly.".into() },
+            );
+        },
+    );
     Ok(())
 }
 
