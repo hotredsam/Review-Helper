@@ -77,8 +77,16 @@ pub fn model_status(db: State<'_, Db>) -> Result<ModelStatus, String> {
 /// Probe the Claude CLI with `--version` (free; no model call) and report the
 /// command, exit code and stderr so the UI can explain availability.
 fn probe_claude(binary: &str) -> ModelStatus {
-    let command = format!("{binary} --version");
-    match Command::new(binary).arg("--version").output() {
+    // Resolve to an absolute path and augment PATH so the probe matches what
+    // run() will do — otherwise a Finder-launched app reports "not installed"
+    // even though the CLI is present in ~/.local/bin.
+    let resolved = super::claude::resolve_binary(binary);
+    let command = format!("{resolved} --version");
+    match Command::new(&resolved)
+        .env("PATH", super::claude::augmented_path())
+        .arg("--version")
+        .output()
+    {
         Ok(out) => {
             let available = out.status.success();
             let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();

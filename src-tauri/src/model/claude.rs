@@ -4,6 +4,7 @@
 //! call strictly read-only against the user's source.
 
 use std::io::{BufRead, BufReader, Read, Write};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use serde_json::Value;
@@ -14,6 +15,51 @@ use super::{ModelEvent, ModelProvider, ModelRequest, UnavailableReason};
 /// the read-only allow-list (which already omits them).
 const DISALLOWED: &str = "Bash,Edit,Write,MultiEdit,NotebookEdit,Task";
 
+/// macOS apps launched from Finder inherit a minimal PATH (`/usr/bin:/bin:…`)
+/// that omits `~/.local/bin`, `/opt/homebrew/bin`, etc. — so a bare `claude`
+/// lookup fails even though it works in a terminal. We resolve an absolute path
+/// from the common CLI install locations (HOME *is* set for GUI apps) and also
+/// augment the child's PATH, so the CLI — and anything it shells out to — is
+/// found however the app was launched.
+fn extra_path_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = PathBuf::from(home);
+        dirs.push(home.join(".local/bin")); // native Claude Code install lives here
+        dirs.push(home.join(".claude/local")); // legacy local install
+    }
+    dirs.push(PathBuf::from("/opt/homebrew/bin"));
+    dirs.push(PathBuf::from("/usr/local/bin"));
+    dirs.push(PathBuf::from("/usr/bin"));
+    dirs.push(PathBuf::from("/bin"));
+    dirs
+}
+
+/// Resolve a CLI name to a usable path. An explicit path (with a separator —
+/// e.g. a test stub) is returned unchanged; a bare name is looked up in the
+/// common install dirs, falling back to the name itself for normal PATH lookup.
+pub(crate) fn resolve_binary(name: &str) -> String {
+    if name.contains('/') {
+        return name.to_string();
+    }
+    for dir in extra_path_dirs() {
+        let cand = dir.join(name);
+        if cand.is_file() {
+            return cand.to_string_lossy().into_owned();
+        }
+    }
+    name.to_string()
+}
+
+/// The common install dirs prepended to the current PATH, for spawned children.
+pub(crate) fn augmented_path() -> std::ffi::OsString {
+    let mut dirs = extra_path_dirs();
+    if let Some(existing) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&existing));
+    }
+    std::env::join_paths(dirs).unwrap_or_else(|_| std::env::var_os("PATH").unwrap_or_default())
+}
+
 pub struct ClaudeCodeProvider {
     binary: String,
 }
@@ -21,7 +67,9 @@ pub struct ClaudeCodeProvider {
 impl Default for ClaudeCodeProvider {
     fn default() -> Self {
         ClaudeCodeProvider {
-            binary: "claude".into(),
+            // Resolve to an absolute path so a Finder-launched app (minimal PATH)
+            // still finds the CLI.
+            binary: resolve_binary("claude"),
         }
     }
 }
@@ -40,6 +88,9 @@ impl ClaudeCodeProvider {
 
     fn command(&self, req: &ModelRequest) -> Command {
         let mut cmd = Command::new(&self.binary);
+        // Augment PATH so the CLI (and anything it shells out to) resolves even
+        // under Finder's minimal environment.
+        cmd.env("PATH", augmented_path());
         cmd.arg("-p")
             .arg("--output-format")
             .arg("stream-json")
@@ -148,7 +199,8 @@ impl ModelProvider for ClaudeCodeProvider {
 /// Probe whether the CLI is installed/runnable. Returns the version string, or an
 /// `Unavailable` event describing why not.
 pub fn check_available(binary: &str) -> Result<String, ModelEvent> {
-    match Command::new(binary).arg("--version").output() {
+    let resolved = resolve_binary(binary);
+    match Command::new(&resolved).env("PATH", augmented_path()).arg("--version").output() {
         Ok(out) if out.status.success() => {
             Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
         }
@@ -336,6 +388,22 @@ mod tests {
         );
         assert_eq!(classify_stderr("you are rate limited"), UnavailableReason::CreditExhausted);
         assert_eq!(classify_stderr("weird thing"), UnavailableReason::Unknown);
+    }
+
+    #[test]
+    fn resolve_binary_passes_through_explicit_paths() {
+        // An explicit path (test stub / user override) is used as-is.
+        assert_eq!(resolve_binary("/abs/path/claude"), "/abs/path/claude");
+        assert_eq!(resolve_binary("./rel/claude"), "./rel/claude");
+    }
+
+    #[test]
+    fn resolve_binary_falls_back_to_name_when_absent() {
+        // A bare name not found in any install dir falls back to PATH lookup.
+        assert_eq!(
+            resolve_binary("definitely-not-a-real-binary-xyz"),
+            "definitely-not-a-real-binary-xyz"
+        );
     }
 
     #[test]
