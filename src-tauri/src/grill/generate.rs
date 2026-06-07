@@ -50,10 +50,17 @@ pub struct BankTopic {
     pub hint: String,
 }
 
-/// The parsed topic bank (loaded once).
+/// The parsed topic bank (loaded once). A corrupt bank degrades grilling to
+/// "no bank topics to add" (select_topics handles an empty bank) rather than
+/// crashing the app on the first grill.
 pub fn bank() -> &'static [BankTopic] {
     static BANK: OnceLock<Vec<BankTopic>> = OnceLock::new();
-    BANK.get_or_init(|| serde_json::from_str(BANK_JSON).expect("bank.json is valid"))
+    BANK.get_or_init(|| {
+        serde_json::from_str(BANK_JSON).unwrap_or_else(|e| {
+            eprintln!("grill: bank.json failed to parse, continuing with no bank topics: {e}");
+            Vec::new()
+        })
+    })
 }
 
 /// Map a depth slider value (1–5, ~1–5h) to a target total question count.

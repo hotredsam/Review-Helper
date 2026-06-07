@@ -37,6 +37,22 @@ fn valid_payload(kind: &str, payload: &str) -> bool {
         None => return false,
     };
     let has = |k: &str| obj.get(k).and_then(Value::as_str).map(|s| !s.trim().is_empty()).unwrap_or(false);
+    // Per-field ceilings (chars). Complements the coarse MAX_PAYLOAD gate: a
+    // single oversized field can sit under 10KB total yet still bloat the merge
+    // prompt once re-injected, so cap each field at the persistence boundary.
+    let within = |k: &str, max: usize| {
+        obj.get(k).and_then(Value::as_str).map(|s| s.chars().count() <= max).unwrap_or(true)
+    };
+    if !(within("topic", 200)
+        && within("choice", 500)
+        && within("rationale", 1500)
+        && within("title", 200)
+        && within("detail", 2000)
+        && within("question", 1000)
+        && within("answer", 2000))
+    {
+        return false;
+    }
     match kind {
         "decision" => has("topic") && has("choice"),
         "feature" => has("title"),
@@ -287,6 +303,24 @@ mod tests {
         assert_eq!(added, 1, "only the complete, bounded payload persists");
         let pending = list(&conn, pid, Some("pending")).unwrap();
         assert_eq!(pending[0].payload["title"], "Good one");
+    }
+
+    #[test]
+    fn rejects_a_single_field_over_its_cap_even_under_max_payload() {
+        let mut conn = db();
+        let pid = project(&conn);
+        // 9KB rationale: under the coarse MAX_PAYLOAD byte gate, but far over the
+        // 1500-char per-field cap — must be rejected by the field check.
+        let big = "z".repeat(9_000);
+        let payload = format!(r#"{{"topic":"DB","choice":"SQLite","rationale":"{big}"}}"#);
+        assert!(payload.len() < MAX_PAYLOAD, "stays under the coarse payload gate");
+        let added = save(
+            &mut conn,
+            pid,
+            &[ParsedSuggestion { kind: "decision".into(), payload }],
+        )
+        .unwrap();
+        assert_eq!(added, 0, "oversized single field is rejected by the per-field cap");
     }
 
     fn count(conn: &Connection, sql: &str) -> i64 {

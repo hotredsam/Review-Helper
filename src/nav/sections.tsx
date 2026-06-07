@@ -34,6 +34,10 @@ export interface Section {
   emptyBody: string;
 }
 
+// Ordered to follow the actual planning loop: understand the project, grill out
+// scope, talk it through, capture ideas, choose the stack, record decisions —
+// then the plan (the synthesis) and the assessment overview. New users land on
+// Understand (the real entry point); returning users land where they left off.
 export const SECTIONS: Section[] = [
   {
     id: "overview",
@@ -50,28 +54,6 @@ export const SECTIONS: Section[] = [
     emptyTitle: "Nothing to understand yet",
     emptyBody:
       "The Understand hub fills with concept cards as you work — architecture, frontend, backend, and more.",
-  },
-  {
-    id: "plan",
-    label: "Plan",
-    icon: ListChecks,
-    emptyTitle: "No plan yet",
-    emptyBody: "Your phased build plan and its tasks will live here once the project is set up.",
-  },
-  {
-    id: "decisions",
-    label: "Decisions",
-    icon: GitBranch,
-    emptyTitle: "No decisions recorded",
-    emptyBody:
-      "Decisions you make — and the ones the model proposes — collect here as a record you can revisit.",
-  },
-  {
-    id: "stack",
-    label: "Stack",
-    icon: Layers,
-    emptyTitle: "No stack chosen",
-    emptyBody: "Frontend, backend, database, deployment and pipes choices appear here once selected.",
   },
   {
     id: "grill",
@@ -97,6 +79,28 @@ export const SECTIONS: Section[] = [
     emptyBody: "Capture feature ideas as they come, then triage them into the plan later.",
   },
   {
+    id: "stack",
+    label: "Stack",
+    icon: Layers,
+    emptyTitle: "No stack chosen",
+    emptyBody: "Frontend, backend, database, deployment and pipes choices appear here once selected.",
+  },
+  {
+    id: "decisions",
+    label: "Decisions",
+    icon: GitBranch,
+    emptyTitle: "No decisions recorded",
+    emptyBody:
+      "Decisions you make — and the ones the model proposes — collect here as a record you can revisit.",
+  },
+  {
+    id: "plan",
+    label: "Plan",
+    icon: ListChecks,
+    emptyTitle: "No plan yet",
+    emptyBody: "Your phased build plan and its tasks will live here once the project is set up.",
+  },
+  {
     id: "learn",
     label: "Learn",
     icon: GraduationCap,
@@ -112,7 +116,7 @@ export const SECTIONS: Section[] = [
   },
 ];
 
-export const DEFAULT_SECTION: SectionId = "overview";
+export const DEFAULT_SECTION: SectionId = "understand";
 
 export function sectionById(id: SectionId): Section {
   return SECTIONS.find((s) => s.id === id) ?? SECTIONS[0];

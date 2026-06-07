@@ -142,7 +142,7 @@ export function SyncPanel({ project }: { project: Project }) {
             className={
               "rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-60 " +
               (destructive > 0
-                ? "bg-danger text-white hover:opacity-90"
+                ? "bg-danger text-danger-fg hover:opacity-90"
                 : "bg-accent text-accent-fg hover:bg-accent-hover")
             }
           >

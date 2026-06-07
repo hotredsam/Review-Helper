@@ -29,6 +29,13 @@ pub fn connect_app_db(app: &AppHandle) -> Result<Connection, Box<dyn std::error:
 /// and by tests that open their own connections.
 pub fn init_connection(conn: &Connection) -> rusqlite::Result<()> {
     conn.pragma_update(None, "foreign_keys", true)?;
+    // Crash-safe persistence: WAL gives atomic commits and recovery if the app
+    // is killed mid-write (the plan/decision record must never be left torn);
+    // synchronous=NORMAL is the safe, fast pairing for WAL. journal_mode returns
+    // a row, so set both via execute_batch (which ignores result rows). WAL is a
+    // no-op on in-memory test DBs, which is fine. synchronous is per-connection,
+    // so it lives here in the shared init path.
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
     run_migrations(conn)
 }
 
