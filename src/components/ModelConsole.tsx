@@ -75,6 +75,7 @@ export function ModelConsole() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          aria-label="Message to Claude"
           placeholder={sessionId ? "Continue the conversation…" : "Ask Claude something…"}
           className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/40"
         />

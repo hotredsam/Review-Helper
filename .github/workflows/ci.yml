@@ -7,7 +7,9 @@ on:
 
 jobs:
   test:
-    runs-on: macos-latest
+    # Pinned (not macos-latest) so signed/notarized release artifacts and the
+    # toolchain stay reproducible across runs.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 

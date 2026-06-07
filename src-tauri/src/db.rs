@@ -36,6 +36,10 @@ pub fn init_connection(conn: &Connection) -> rusqlite::Result<()> {
     // no-op on in-memory test DBs, which is fine. synchronous is per-connection,
     // so it lives here in the shared init path.
     conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
+    // Background model threads (plan/grill) hold the gates concurrently with
+    // foreground commands; without a busy timeout a transient lock returns
+    // SQLITE_BUSY immediately instead of waiting briefly and retrying.
+    conn.busy_timeout(std::time::Duration::from_millis(5000))?;
     run_migrations(conn)
 }
 
@@ -133,6 +137,15 @@ mod tests {
         // A case-variant of an existing term collides — no duplicate card.
         let dup = conn.execute("INSERT INTO learning_cards (term, source) VALUES ('foo', 'seed')", []);
         assert!(dup.is_err(), "'foo' must collide with 'Foo' under NOCASE uniqueness");
+    }
+
+    #[test]
+    fn busy_timeout_is_set() {
+        let conn = migrated_memory_db();
+        let ms: i64 = conn
+            .query_row("PRAGMA busy_timeout", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(ms, 5000, "busy_timeout is set so transient locks retry, not fail");
     }
 
     #[test]

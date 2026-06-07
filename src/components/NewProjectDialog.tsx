@@ -198,6 +198,7 @@ export function NewProjectDialog({ open, onClose }: Props) {
                   className={inputCls}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  aria-label="Search your repositories"
                   placeholder="Search your repositories…"
                 />
                 <button

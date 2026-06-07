@@ -136,7 +136,10 @@ fn parse_repo_ref(input: &str) -> Option<(String, String)> {
     if let Some(rest) = s.strip_prefix("git@github.com:") {
         return split_owner_repo(rest);
     }
-    for prefix in ["https://github.com/", "http://github.com/", "github.com/"] {
+    // HTTPS or SSH only — reject plaintext http:// so a link/clone can't be
+    // silently downgraded to a MITM-able transport. (Bare github.com/ resolves
+    // to HTTPS at clone time.)
+    for prefix in ["https://github.com/", "github.com/"] {
         if let Some(rest) = s.strip_prefix(prefix) {
             return split_owner_repo(rest);
         }
@@ -247,5 +250,15 @@ mod tests {
         assert_eq!(parse_repo_ref("https://gitlab.com/a/b"), None);
         assert_eq!(parse_repo_ref("just-a-name"), None);
         assert_eq!(parse_repo_ref("a/b/c"), None);
+    }
+
+    #[test]
+    fn rejects_plaintext_http_github_urls() {
+        // http:// is MITM-able; only https/ssh/bare forms are accepted.
+        assert_eq!(parse_repo_ref("http://github.com/hotredsam/Review-Helper"), None);
+        // The secure forms still parse.
+        let expected = Some(("hotredsam".to_string(), "Review-Helper".to_string()));
+        assert_eq!(parse_repo_ref("https://github.com/hotredsam/Review-Helper"), expected);
+        assert_eq!(parse_repo_ref("hotredsam/Review-Helper"), expected);
     }
 }

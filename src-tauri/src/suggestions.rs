@@ -228,25 +228,18 @@ pub fn list(conn: &Connection, project_id: i64, status: Option<&str>) -> Result<
             created_at: r.get(4)?,
         })
     };
-    let base = "SELECT id, kind, payload, status, created_at FROM suggestions WHERE project_id = ?1";
-    match status {
-        Some(s) => {
-            let mut stmt = conn
-                .prepare(&format!("{base} AND status = ?2 ORDER BY id DESC"))
-                .map_err(|e| e.to_string())?;
-            stmt.query_map(params![project_id, s], row)
-                .and_then(Iterator::collect)
-                .map_err(|e| e.to_string())
-        }
-        None => {
-            let mut stmt = conn
-                .prepare(&format!("{base} ORDER BY id DESC"))
-                .map_err(|e| e.to_string())?;
-            stmt.query_map(params![project_id], row)
-                .and_then(Iterator::collect)
-                .map_err(|e| e.to_string())
-        }
-    }
+    // One fully-parameterized query: `?2 IS NULL` no-ops the status filter when
+    // no status is given. Avoids building SQL with format!() (a fragile pattern
+    // even when only constants are interpolated).
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, kind, payload, status, created_at FROM suggestions \
+             WHERE project_id = ?1 AND (?2 IS NULL OR status = ?2) ORDER BY id DESC",
+        )
+        .map_err(|e| e.to_string())?;
+    stmt.query_map(params![project_id, status], row)
+        .and_then(Iterator::collect)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -321,6 +314,28 @@ mod tests {
         )
         .unwrap();
         assert_eq!(added, 0, "oversized single field is rejected by the per-field cap");
+    }
+
+    #[test]
+    fn list_filters_by_status_and_returns_all_when_none() {
+        let mut conn = db();
+        let pid = project(&conn);
+        save(
+            &mut conn,
+            pid,
+            &[
+                ParsedSuggestion { kind: "decision".into(), payload: r#"{"topic":"DB","choice":"SQLite"}"#.into() },
+                ParsedSuggestion { kind: "feature".into(), payload: r#"{"title":"Export"}"#.into() },
+            ],
+        )
+        .unwrap();
+        let feat_id = list(&conn, pid, Some("pending")).unwrap().iter().find(|s| s.kind == "feature").unwrap().id;
+        dismiss(&conn, pid, feat_id).unwrap();
+
+        // None returns every status; the filtered forms partition them.
+        assert_eq!(list(&conn, pid, None).unwrap().len(), 2, "None returns all rows");
+        assert_eq!(list(&conn, pid, Some("pending")).unwrap().len(), 1);
+        assert_eq!(list(&conn, pid, Some("dismissed")).unwrap().len(), 1);
     }
 
     fn count(conn: &Connection, sql: &str) -> i64 {

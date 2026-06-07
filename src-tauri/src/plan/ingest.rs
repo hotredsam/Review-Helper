@@ -23,14 +23,21 @@ const TOTAL_CAP: usize = 32_000;
 /// Collect existing planning docs as a prompt block. Empty string if none found.
 pub fn collect_existing_docs(clone_path: &str) -> String {
     let root = Path::new(clone_path);
+    // Treat the clone as untrusted: resolve the real clone root, then refuse any
+    // doc whose real path escapes it, so a hostile/misconfigured repo can't point
+    // README/.planning at e.g. /etc/passwd or ~/.ssh and leak it into the
+    // analysis prompt. Mirrors the defense in cards/detect.rs.
+    let Ok(canon_root) = std::fs::canonicalize(root) else {
+        return String::new();
+    };
     let mut found: Vec<(String, String)> = Vec::new();
     let mut total = 0usize;
 
-    if let Ok(entries) = std::fs::read_dir(root) {
+    if let Ok(entries) = std::fs::read_dir(&canon_root) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
             if KNOWN_ROOT_FILES.iter().any(|k| k.eq_ignore_ascii_case(&name)) {
-                add_file(&entry.path(), &name, &mut found, &mut total);
+                add_file(&entry.path(), &name, &canon_root, &mut found, &mut total);
             }
         }
     }
@@ -39,12 +46,12 @@ pub fn collect_existing_docs(clone_path: &str) -> String {
         if total >= TOTAL_CAP {
             break;
         }
-        if let Ok(entries) = std::fs::read_dir(root.join(sub)) {
+        if let Ok(entries) = std::fs::read_dir(canon_root.join(sub)) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().is_some_and(|x| x.eq_ignore_ascii_case("md")) {
                     let rel = format!("{sub}/{}", entry.file_name().to_string_lossy());
-                    add_file(&path, &rel, &mut found, &mut total);
+                    add_file(&path, &rel, &canon_root, &mut found, &mut total);
                 }
             }
         }
@@ -65,11 +72,18 @@ pub fn collect_existing_docs(clone_path: &str) -> String {
     out
 }
 
-fn add_file(path: &Path, name: &str, found: &mut Vec<(String, String)>, total: &mut usize) {
+fn add_file(path: &Path, name: &str, canon_root: &Path, found: &mut Vec<(String, String)>, total: &mut usize) {
     if *total >= TOTAL_CAP {
         return;
     }
-    if let Ok(content) = std::fs::read_to_string(path) {
+    // Resolve symlinks; require the real target to stay inside the clone.
+    let Ok(real) = std::fs::canonicalize(path) else {
+        return;
+    };
+    if !real.starts_with(canon_root) {
+        return;
+    }
+    if let Ok(content) = std::fs::read_to_string(&real) {
         let capped: String = content.chars().take(PER_FILE_CAP).collect();
         *total += capped.len();
         found.push((name.to_string(), capped));
@@ -116,5 +130,23 @@ mod tests {
         std::fs::write(dir.join("main.rs"), "fn main() {}").unwrap();
         assert!(collect_existing_docs(dir.to_str().unwrap()).is_empty());
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn refuses_symlinked_doc_escaping_the_clone() {
+        // base/secret.md lives OUTSIDE the clone; clone/README.md symlinks to it.
+        let base = tmp();
+        let clone = base.join("clone");
+        std::fs::create_dir_all(&clone).unwrap();
+        let secret = base.join("secret.md");
+        std::fs::write(&secret, "TOP SECRET — should never reach the prompt").unwrap();
+        std::os::unix::fs::symlink(&secret, clone.join("README.md")).unwrap();
+
+        let block = collect_existing_docs(clone.to_str().unwrap());
+        assert!(!block.contains("TOP SECRET"), "an escaping symlinked doc must not be read");
+        assert!(block.is_empty(), "nothing collected from the escaping symlink");
+
+        std::fs::remove_dir_all(&base).ok();
     }
 }
