@@ -9,7 +9,7 @@ interface Props {
 }
 
 /** Left rail: hamburger toggle, project switcher, and the section nav. Sections
- *  other than Settings are disabled until a project exists. */
+ *  other than Settings and the Learn stub are disabled until a project exists. */
 export function Sidebar({ onNewProject, hasProject }: Props) {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggle = useUiStore((s) => s.toggleSidebar);
@@ -51,7 +51,7 @@ export function Sidebar({ onNewProject, hasProject }: Props) {
               disabled={disabled}
               title={collapsed ? s.label : undefined}
               className={
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors " +
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 " +
                 (collapsed ? "justify-center " : "") +
                 (isActive
                   ? "bg-accent/10 font-medium text-fg"

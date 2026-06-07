@@ -1,5 +1,5 @@
 # Phase 14 — "Coming soon" learning mode (stub)
-Status: not started
+Status: done
 Goal: A clearly-stubbed placeholder for the future non-vibecoding learning mode.
 Depends on: Phase 1
 

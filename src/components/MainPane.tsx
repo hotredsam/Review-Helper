@@ -20,7 +20,8 @@ interface Props {
 }
 
 /** Main content area: the first-run prompt when no project exists, otherwise the
- *  active section (a clean empty state, or the Settings pane). */
+ *  active section from the nav (a project pane, the Settings pane, the Learn
+ *  coming-soon stub, or a clean empty state). */
 export function MainPane({ onNewProject }: Props) {
   const activeSectionId = useUiStore((s) => s.activeSection);
   const projects = useProjectStore((s) => s.projects);

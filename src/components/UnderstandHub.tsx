@@ -155,7 +155,7 @@ function CardDetail({ card }: { card: Card }) {
       <div className="mb-3 flex items-center gap-2">
         <h2 className="text-lg font-semibold text-fg">{card.term}</h2>
         {card.domain && (
-          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-fg-subtle">
+          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-fg-muted">
             {card.domain}
           </span>
         )}

@@ -11,7 +11,7 @@ export function ComingSoon() {
         title="Learning mode — coming soon"
         body="A future mode for structured study beyond vibecoding (e.g. CPA exam prep). It isn't built yet — this is a placeholder for what's next."
       />
-      <span className="rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-fg-subtle">
+      <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-fg-muted">
         Coming soon
       </span>
     </div>

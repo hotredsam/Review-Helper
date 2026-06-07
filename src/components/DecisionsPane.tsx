@@ -69,7 +69,7 @@ export function DecisionsPane({ project }: { project: Project }) {
                 className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface p-3"
               >
                 <div className="min-w-0">
-                  <span className="mr-2 rounded-full bg-surface-2 px-2 py-0.5 text-xs capitalize text-fg-subtle">
+                  <span className="mr-2 rounded-full bg-surface-2 px-2 py-0.5 text-xs capitalize text-fg-muted">
                     {s.kind}
                   </span>
                   <span className="text-sm text-fg">{summarizeSuggestion(s)}</span>

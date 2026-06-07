@@ -37,7 +37,7 @@ export function QuestionCard({ projectId, question }: { projectId: number; quest
     <li className="rounded-lg border border-border bg-surface p-4">
       <div className="mb-1 flex items-center gap-2">
         {question.dimension && (
-          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs capitalize text-fg-subtle">
+          <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs capitalize text-fg-muted">
             {question.dimension}
           </span>
         )}
