@@ -43,7 +43,7 @@ export function Sidebar({ onNewProject, hasProject }: Props) {
         {SECTIONS.map((s) => {
           const Icon = s.icon;
           const isActive = s.id === active;
-          const disabled = !hasProject && s.id !== "settings";
+          const disabled = !hasProject && s.id !== "settings" && s.id !== "learn";
           return (
             <button
               key={s.id}

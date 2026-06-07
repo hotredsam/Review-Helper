@@ -7,6 +7,7 @@ import {
   MessageSquareQuote,
   MessagesSquare,
   Inbox,
+  GraduationCap,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -22,6 +23,7 @@ export type SectionId =
   | "grill"
   | "chat"
   | "inbox"
+  | "learn"
   | "settings";
 
 export interface Section {
@@ -93,6 +95,13 @@ export const SECTIONS: Section[] = [
     icon: Inbox,
     emptyTitle: "Inbox empty",
     emptyBody: "Capture feature ideas as they come, then triage them into the plan later.",
+  },
+  {
+    id: "learn",
+    label: "Learn",
+    icon: GraduationCap,
+    emptyTitle: "Learning mode — coming soon",
+    emptyBody: "A future mode for structured study beyond vibecoding (e.g. CPA exam prep). Not available yet.",
   },
   {
     id: "settings",
