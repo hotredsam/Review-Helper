@@ -27,7 +27,7 @@ INGEST EXISTING DOCS FIRST. Before planning, actively search for and fully absor
 Emit ONLY the JSON object — nothing before it, nothing after it. No markdown, no ``` fences, no preamble. The first character of your output must be `{` and the last `}`. It must be valid, parseable JSON adhering exactly to this shape:
 
 {
-  "current_state": string,   // honest summary of what the repo is today
+  "current_state": string,   // honest summary of what the repo is today, as concise GitHub-flavored markdown: a one-line lead, then a few short `-` bullets. Scannable, not a wall of text.
   "body_md": string,         // markdown overview of the plan's arc (markdown allowed here)
   "confidence": string,      // "high" | "medium" | "low"
   "notes": string,           // assumptions, inferences vs observations, unknowns ("" if none)

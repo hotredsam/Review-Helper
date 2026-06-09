@@ -4,6 +4,7 @@ import { usePlanStore, ensureAnalysisListener } from "../store/planStore";
 import { WhyExplain } from "./WhyExplain";
 import { SyncPanel } from "./SyncPanel";
 import { Modal } from "./Modal";
+import { MarkdownBlock } from "./MarkdownBlock";
 import type { Project } from "../api/projects";
 
 /**
@@ -144,7 +145,7 @@ export function PlanPane({ project }: { project: Project }) {
           <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
             Current state
           </h2>
-          <p className="whitespace-pre-wrap text-sm text-fg-muted">{plan.current_state}</p>
+          <MarkdownBlock>{plan.current_state}</MarkdownBlock>
         </section>
       )}
 
@@ -157,24 +158,36 @@ export function PlanPane({ project }: { project: Project }) {
         )}
         {plan.phases.map((ph, i) => (
           <div key={ph.id} className="rounded-lg border border-border bg-surface p-4">
-            <div className="mb-2 flex items-baseline gap-2">
+            <div className="mb-2 flex items-center gap-2">
               <span className="text-xs font-semibold text-fg-subtle">{i + 1}</span>
               <h3 className="font-semibold text-fg">{ph.title}</h3>
+              <PhaseStatus status={ph.status} />
             </div>
-            {ph.goal && <p className="mb-3 text-sm text-fg-muted">{ph.goal}</p>}
-            <ul className="space-y-2">
-              {ph.tasks.map((t) => (
-                <li key={t.id} className="rounded-md bg-surface-2 px-3 py-2">
-                  <p className="text-sm font-medium text-fg">{t.title}</p>
-                  {t.body_md && <p className="mt-0.5 text-xs text-fg-muted">{t.body_md}</p>}
-                  {t.verification && (
-                    <p className="mt-1 text-xs text-fg-subtle">
-                      <span className="font-medium">Done when:</span> {t.verification}
-                    </p>
-                  )}
-                </li>
-              ))}
-            </ul>
+            {ph.goal && <p className="mb-2 text-sm text-fg-muted">{ph.goal}</p>}
+            {ph.tasks.length > 0 && (
+              <details open={ph.status === "in_progress"}>
+                <summary className="cursor-pointer select-none text-xs font-medium text-fg-subtle hover:text-fg">
+                  {ph.tasks.length} {ph.tasks.length === 1 ? "task" : "tasks"}
+                </summary>
+                <ul className="mt-2 space-y-2">
+                  {ph.tasks.map((t) => (
+                    <li key={t.id} className="rounded-md bg-surface-2 px-3 py-2">
+                      <p className="text-sm font-medium text-fg">{t.title}</p>
+                      {t.body_md && (
+                        <div className="mt-0.5 text-xs">
+                          <MarkdownBlock>{t.body_md}</MarkdownBlock>
+                        </div>
+                      )}
+                      {t.verification && (
+                        <p className="mt-1 text-xs text-fg-subtle">
+                          <span className="font-medium">Done when:</span> {t.verification}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
         ))}
       </section>
@@ -280,6 +293,18 @@ export function PlanPane({ project }: { project: Project }) {
 
       <SyncPanel project={project} />
     </div>
+  );
+}
+
+function PhaseStatus({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    done: { label: "Done", cls: "bg-success/15 text-success" },
+    in_progress: { label: "In progress", cls: "bg-accent/15 text-accent" },
+    not_started: { label: "Not started", cls: "bg-surface-2 text-fg-subtle" },
+  };
+  const s = map[status] ?? map.not_started;
+  return (
+    <span className={"ml-auto rounded-full px-2 py-0.5 text-xs font-medium " + s.cls}>{s.label}</span>
   );
 }
 
