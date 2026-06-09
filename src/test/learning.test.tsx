@@ -15,6 +15,11 @@ vi.mock("../api/learning", () => ({
     source_text: "Conversational basics for a trip.",
     stage: "intake",
   })),
+  learningIntake: vi.fn(async () => [
+    { id: 1, idx: 0, question: "What's your current level?", answer: null },
+    { id: 2, idx: 1, question: "What's your goal?", answer: "A trip" },
+  ]),
+  learningIntakeAnswer: vi.fn(async () => {}),
 }));
 
 import { LearningShell } from "../components/learning/LearningShell";
@@ -39,8 +44,9 @@ describe("LearningShell", () => {
     const user = userEvent.setup();
     render(<LearningShell />);
     await user.click(await screen.findByRole("button", { name: /Spanish A1/i }));
-    // Detail view loads the subject's source text.
+    // Detail view loads the subject's goal + the generated scoping questions.
     expect(await screen.findByText(/Conversational basics for a trip\./i)).toBeTruthy();
+    expect(await screen.findByText(/What's your current level\?/i)).toBeTruthy();
   });
 
   it("surfaces an error when loading subjects fails — never a blank screen", async () => {

@@ -139,6 +139,8 @@ pub fn run() {
             learning::commands::subjects_list,
             learning::commands::subject_get,
             learning::commands::subject_delete,
+            learning::commands::learning_intake,
+            learning::commands::learning_intake_answer,
             projects::create_project,
             projects::list_projects,
             projects::get_project,

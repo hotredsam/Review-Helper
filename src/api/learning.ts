@@ -38,3 +38,21 @@ export function subjectGet(subjectId: number): Promise<SubjectDetail> {
 export function subjectDelete(subjectId: number): Promise<void> {
   return invoke<void>("subject_delete", { subjectId });
 }
+
+// ---- L1: intake grill (scope the subject before building materials) ----
+
+export interface IntakeItem {
+  id: number;
+  idx: number;
+  question: string;
+  answer: string | null;
+}
+
+/** The subject's scoping questions, generated + cached on first call. */
+export function learningIntake(subjectId: number): Promise<IntakeItem[]> {
+  return invoke<IntakeItem[]>("learning_intake", { subjectId });
+}
+
+export function learningIntakeAnswer(intakeId: number, answer: string): Promise<void> {
+  return invoke<void>("learning_intake_answer", { intakeId, answer });
+}

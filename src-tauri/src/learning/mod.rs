@@ -8,4 +8,6 @@
 //! styles": that framing is scientifically debunked; we adapt on evidence.
 
 pub mod commands;
+mod gen;
+pub mod intake;
 pub mod store;

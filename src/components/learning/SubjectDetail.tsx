@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { type SubjectDetail as SubjectDetailData, subjectGet } from "../../api/learning";
 import { useLearningStore } from "../../store/learningStore";
+import { IntakePane } from "./IntakePane";
 
 const STAGE_LABEL: Record<string, string> = {
   intake: "Scoping",
@@ -9,16 +10,19 @@ const STAGE_LABEL: Record<string, string> = {
   ready: "Studying",
 };
 
-/** A single subject's workspace. L0 shows the overview; later sub-phases add the
- *  intake grill, module proposal, and the generated study materials as tabs. */
+/** A single subject's workspace, routed by stage: scope it (intake grill), pick
+ *  a study plan (module proposal), then study the generated materials. Later
+ *  sub-phases fill in the proposed/ready stages. */
 export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack: () => void }) {
   const remove = useLearningStore((s) => s.remove);
   const [detail, setDetail] = useState<SubjectDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [answered, setAnswered] = useState(0);
 
   useEffect(() => {
     setDetail(null);
     setError(null);
+    setAnswered(0);
     subjectGet(subjectId)
       .then(setDetail)
       .catch((e) => setError(String(e)));
@@ -37,10 +41,7 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
   return (
     <div className="mx-auto max-w-4xl space-y-5 p-8">
       <div className="flex items-center justify-between gap-3">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
-        >
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg">
           <ArrowLeft className="h-4 w-4" />
           All subjects
         </button>
@@ -64,25 +65,37 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
 
       {detail && (
         <>
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-semibold text-fg">{detail.title}</h1>
-            <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-fg-muted">
-              {STAGE_LABEL[detail.stage] ?? detail.stage}
-            </span>
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-semibold text-fg">{detail.title}</h1>
+              <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-fg-muted">
+                {STAGE_LABEL[detail.stage] ?? detail.stage}
+              </span>
+            </div>
+            {detail.source_text?.trim() && (
+              <p className="line-clamp-3 text-sm text-fg-muted">{detail.source_text}</p>
+            )}
           </div>
 
-          <section className="rounded-xl border border-border bg-surface p-5">
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-              {detail.source_kind === "upload" ? "From your upload" : "What you want to learn"}
-            </h2>
-            <p className="whitespace-pre-wrap text-sm text-fg-muted">
-              {detail.source_text?.trim() || "No description yet."}
-            </p>
-          </section>
+          {detail.stage === "intake" && (
+            <>
+              <IntakePane subject={detail} onReadyToPropose={setAnswered} />
+              <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+                <span className="text-xs text-fg-subtle">
+                  {answered === 0 ? "Answer a few to tailor the plan." : `${answered} answered`}
+                </span>
+                {/* The "Propose study plan" action arrives with the proposal step. */}
+              </div>
+            </>
+          )}
 
-          <p className="text-sm text-fg-subtle">
-            Next, this subject gets scoped with a few questions, then a study plan is proposed. (Building.)
-          </p>
+          {detail.stage === "proposed" && (
+            <p className="text-sm text-fg-subtle">Module proposal — building next.</p>
+          )}
+
+          {detail.stage === "ready" && (
+            <p className="text-sm text-fg-subtle">Study materials — building next.</p>
+          )}
         </>
       )}
     </div>

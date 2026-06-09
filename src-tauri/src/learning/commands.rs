@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use tauri::State;
 
+use super::intake::{self, IntakeItem};
 use super::store::{self, Subject, SubjectDetail};
 use crate::db::Db;
 
@@ -68,4 +69,48 @@ pub fn subject_get(db: State<'_, Db>, subject_id: i64) -> Result<SubjectDetail, 
 pub fn subject_delete(db: State<'_, Db>, subject_id: i64) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     store::delete_subject(&conn, subject_id)
+}
+
+/// The subject's intake (scoping) questions, generated + cached on first call.
+/// Cache check and persistence happen under a brief DB lock; the model call runs
+/// WITHOUT the lock (so it never blocks the rest of the app), serialized per
+/// subject by the gate so a double-click can't double-generate.
+#[tauri::command]
+pub fn learning_intake(
+    db: State<'_, Db>,
+    gate: State<'_, LearningGate>,
+    subject_id: i64,
+) -> Result<Vec<IntakeItem>, String> {
+    let subject = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let existing = intake::list(&conn, subject_id)?;
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+        store::get_subject(&conn, subject_id)?.ok_or("Subject not found.")?
+    };
+
+    let glock = gate.for_subject(subject_id);
+    let _g = glock.lock().unwrap_or_else(|e| e.into_inner());
+
+    // Another waiter may have generated while we blocked on the gate.
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let existing = intake::list(&conn, subject_id)?;
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+    }
+
+    let questions = intake::fetch_questions(&subject)?; // model call, no DB lock held
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    intake::save(&conn, subject_id, &questions)?;
+    intake::list(&conn, subject_id)
+}
+
+/// Save (or clear) the answer to one intake question.
+#[tauri::command]
+pub fn learning_intake_answer(db: State<'_, Db>, intake_id: i64, answer: String) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    intake::set_answer(&conn, intake_id, &answer)
 }
