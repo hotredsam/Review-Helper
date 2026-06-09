@@ -12,9 +12,11 @@ const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1200, height: 1000 }, deviceScaleFactor: 2 });
 await p.goto(`http://localhost:1420/preview.html?pane=${pane}&theme=${theme}`, { waitUntil: "domcontentloaded" });
 await p.waitForTimeout(1200);
-if (clickText) {
-  await p.click(`button:has-text("${clickText}")`).catch((e) => console.error("click failed:", String(e).split("\n")[0]));
-  await p.waitForTimeout(1500);
+// clickText may be a comma-separated sequence (e.g. "Spanish A1,Progress") to
+// drill into nested tabs; each is clicked in order with a short settle wait.
+for (const t of clickText.split(",").map((s) => s.trim()).filter(Boolean)) {
+  await p.click(`button:has-text("${t}")`).catch((e) => console.error(`click "${t}" failed:`, String(e).split("\n")[0]));
+  await p.waitForTimeout(1400);
 }
 await p.screenshot({ path: `docs/ui-shots/${outName}.png` });
 console.log("shot", outName);

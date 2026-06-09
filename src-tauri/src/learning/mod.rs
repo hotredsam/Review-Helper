@@ -10,5 +10,9 @@
 pub mod commands;
 mod gen;
 pub mod intake;
+pub mod mastery;
+pub mod materials;
+pub mod profile;
 pub mod propose;
+pub mod schedule;
 pub mod store;

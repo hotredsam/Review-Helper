@@ -4,6 +4,7 @@ import { type SubjectDetail as SubjectDetailData, subjectGet, learningPropose } 
 import { useLearningStore } from "../../store/learningStore";
 import { IntakePane } from "./IntakePane";
 import { ModuleProposalPane } from "./ModuleProposalPane";
+import { StudyView } from "./StudyView";
 
 const STAGE_LABEL: Record<string, string> = {
   intake: "Scoping",
@@ -124,9 +125,7 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
 
           {detail.stage === "proposed" && <ModuleProposalPane subjectId={subjectId} onConfirmed={() => void reload()} />}
 
-          {detail.stage === "ready" && (
-            <p className="text-sm text-fg-subtle">Study materials — building next.</p>
-          )}
+          {detail.stage === "ready" && <StudyView subjectId={subjectId} />}
         </>
       )}
     </div>

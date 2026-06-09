@@ -6,11 +6,15 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use serde::Serialize;
 use tauri::State;
 
 use super::intake::{self, IntakeItem};
+use super::materials::{self, Flashcard, QuizQuestion};
+use super::profile::{self, ProfileSnapshot};
 use super::propose::{self, ProposedModule};
 use super::store::{self, Subject, SubjectDetail};
+use super::{mastery, schedule};
 use crate::db::Db;
 
 const MAX_TITLE_CHARS: usize = 200;
@@ -175,4 +179,153 @@ pub fn learning_confirm_plan(db: State<'_, Db>, subject_id: i64) -> Result<(), S
         return Err("Keep at least one module to study.".into());
     }
     store::set_stage(&conn, subject_id, "ready")
+}
+
+/// Load a module's subject + identity for generation (under a short lock).
+fn module_grounding(db: &State<'_, Db>, module_id: i64) -> Result<(SubjectDetail, materials::ModuleRow), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let m = materials::module_row(&conn, module_id)?;
+    let subject = store::get_subject(&conn, m.subject_id)?.ok_or("Subject not found.")?;
+    Ok((subject, m))
+}
+
+/// A module's notes, generated + cached on first open. Same lock discipline as
+/// the other generators (cache + per-module gate + lock-free model call + save).
+#[tauri::command]
+pub fn learning_notes(db: State<'_, Db>, gate: State<'_, LearningGate>, module_id: i64) -> Result<String, String> {
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        if let Some(body) = materials::notes_get(&conn, module_id)? {
+            return Ok(body);
+        }
+    }
+    let glock = gate.for_subject(module_id);
+    let _g = glock.lock().unwrap_or_else(|e| e.into_inner());
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        if let Some(body) = materials::notes_get(&conn, module_id)? {
+            return Ok(body);
+        }
+    }
+    let (subject, m) = module_grounding(&db, module_id)?;
+    let body = materials::fetch_notes(&subject, &m)?; // model call, no DB lock
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    materials::notes_save(&conn, module_id, &body)?;
+    materials::set_module_status(&conn, module_id, "ready")?;
+    Ok(body)
+}
+
+/// A module's flashcards, generated + cached on first open.
+#[tauri::command]
+pub fn learning_flashcards(db: State<'_, Db>, gate: State<'_, LearningGate>, module_id: i64) -> Result<Vec<Flashcard>, String> {
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let existing = materials::flashcards_list(&conn, module_id)?;
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+    }
+    let glock = gate.for_subject(module_id);
+    let _g = glock.lock().unwrap_or_else(|e| e.into_inner());
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let existing = materials::flashcards_list(&conn, module_id)?;
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+    }
+    let (subject, m) = module_grounding(&db, module_id)?;
+    let cards = materials::fetch_flashcards(&subject, &m)?; // model call, no DB lock
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    materials::flashcards_save(&conn, module_id, m.subject_id, m.skill.as_deref().unwrap_or(""), &cards)?;
+    materials::set_module_status(&conn, module_id, "ready")?;
+    materials::flashcards_list(&conn, module_id)
+}
+
+/// A module's quiz questions, generated + cached on first open.
+#[tauri::command]
+pub fn learning_quiz(db: State<'_, Db>, gate: State<'_, LearningGate>, module_id: i64) -> Result<Vec<QuizQuestion>, String> {
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let existing = materials::quiz_list(&conn, module_id)?;
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+    }
+    let glock = gate.for_subject(module_id);
+    let _g = glock.lock().unwrap_or_else(|e| e.into_inner());
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let existing = materials::quiz_list(&conn, module_id)?;
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+    }
+    let (subject, m) = module_grounding(&db, module_id)?;
+    let questions = materials::fetch_quiz(&subject, &m)?; // model call, no DB lock
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    materials::quiz_save(&conn, module_id, m.subject_id, m.skill.as_deref().unwrap_or(""), &questions)?;
+    materials::set_module_status(&conn, module_id, "ready")?;
+    materials::quiz_list(&conn, module_id)
+}
+
+// ---- L4: the adaptive engine (FSRS scheduling + BKT mastery + pace) ----
+
+/// Grade a flashcard (1=Again…4=Easy): advances its FSRS schedule, nudges the
+/// skill's mastery, and records the review. Returns the next due date (RFC3339).
+#[tauri::command]
+pub fn learning_flashcard_grade(db: State<'_, Db>, flashcard_id: i64, rating: i64) -> Result<String, String> {
+    if !(1..=4).contains(&rating) {
+        return Err("Invalid grade.".into());
+    }
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let g = schedule::grade(&conn, flashcard_id, rating)?;
+    let _ = mastery::update(&conn, g.subject_id, &g.skill, g.correct);
+    profile::record_flashcard_review(&conn, g.subject_id)?;
+    Ok(g.due)
+}
+
+#[derive(Serialize)]
+pub struct QuizResult {
+    pub correct: bool,
+    pub answer_idx: i64,
+    pub explanation: Option<String>,
+    pub p_known: f64,
+}
+
+/// Submit a quiz answer (the chosen option index): records the attempt, updates
+/// the skill's BKT mastery + pace profile, and returns the correct answer +
+/// explanation so the UI can give immediate feedback (retrieval practice).
+#[tauri::command]
+pub fn learning_quiz_answer(
+    db: State<'_, Db>,
+    question_id: i64,
+    choice_idx: i64,
+    latency_ms: Option<i64>,
+) -> Result<QuizResult, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let (subject_id, skill, answer_idx, explanation): (i64, Option<String>, i64, Option<String>) = conn
+        .query_row(
+            "SELECT subject_id, skill, answer_idx, explanation FROM learning_quiz_questions WHERE id = ?1",
+            [question_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .map_err(|_| "Question not found.".to_string())?;
+    let correct = choice_idx == answer_idx;
+    conn.execute(
+        "INSERT INTO learning_quiz_attempts (question_id, subject_id, correct, latency_ms) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![question_id, subject_id, correct as i64, latency_ms],
+    )
+    .map_err(|e| e.to_string())?;
+    let p_known = mastery::update(&conn, subject_id, skill.as_deref().unwrap_or(""), correct)?;
+    profile::record_attempt(&conn, subject_id, correct, latency_ms.unwrap_or(0))?;
+    Ok(QuizResult { correct, answer_idx, explanation, p_known })
+}
+
+/// The learner profile for a subject (pace + per-skill mastery) for the progress
+/// view and the "how you learn best" summary.
+#[tauri::command]
+pub fn learning_progress(db: State<'_, Db>, subject_id: i64) -> Result<ProfileSnapshot, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    profile::snapshot(&conn, subject_id)
 }

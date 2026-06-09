@@ -89,3 +89,75 @@ export function learningModuleSetIncluded(moduleId: number, included: boolean): 
 export function learningConfirmPlan(subjectId: number): Promise<void> {
   return invoke<void>("learning_confirm_plan", { subjectId });
 }
+
+// ---- L3/L4: study materials + the adaptive engine ----
+
+export interface Flashcard {
+  id: number;
+  front: string;
+  back: string;
+  due: string | null;
+  reps: number;
+}
+
+export interface QuizQuestion {
+  id: number;
+  question: string;
+  options: string[];
+  answer_idx: number;
+  explanation: string | null;
+}
+
+export interface QuizResult {
+  correct: boolean;
+  answer_idx: number;
+  explanation: string | null;
+  p_known: number;
+}
+
+export interface SkillMastery {
+  skill: string;
+  p_known: number;
+  n_obs: number;
+}
+
+export interface ProfileSnapshot {
+  attempts: number;
+  correct: number;
+  accuracy: number;
+  flashcard_reviews: number;
+  avg_latency_ms: number;
+  skills: SkillMastery[];
+}
+
+/** A module's notes (markdown), generated + cached on first open. */
+export function learningNotes(moduleId: number): Promise<string> {
+  return invoke<string>("learning_notes", { moduleId });
+}
+
+export function learningFlashcards(moduleId: number): Promise<Flashcard[]> {
+  return invoke<Flashcard[]>("learning_flashcards", { moduleId });
+}
+
+export function learningQuiz(moduleId: number): Promise<QuizQuestion[]> {
+  return invoke<QuizQuestion[]>("learning_quiz", { moduleId });
+}
+
+/** Grade a flashcard (1=Again, 2=Hard, 3=Good, 4=Easy); returns next due date. */
+export function learningFlashcardGrade(flashcardId: number, rating: 1 | 2 | 3 | 4): Promise<string> {
+  return invoke<string>("learning_flashcard_grade", { flashcardId, rating });
+}
+
+/** Submit a quiz answer; returns correctness + the right answer + explanation. */
+export function learningQuizAnswer(
+  questionId: number,
+  choiceIdx: number,
+  latencyMs?: number,
+): Promise<QuizResult> {
+  return invoke<QuizResult>("learning_quiz_answer", { questionId, choiceIdx, latencyMs: latencyMs ?? null });
+}
+
+/** The learner profile (pace + per-skill mastery) for the progress view. */
+export function learningProgress(subjectId: number): Promise<ProfileSnapshot> {
+  return invoke<ProfileSnapshot>("learning_progress", { subjectId });
+}
