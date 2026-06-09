@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use tauri::State;
 
 use super::intake::{self, IntakeItem};
+use super::propose::{self, ProposedModule};
 use super::store::{self, Subject, SubjectDetail};
 use crate::db::Db;
 
@@ -113,4 +114,65 @@ pub fn learning_intake(
 pub fn learning_intake_answer(db: State<'_, Db>, intake_id: i64, answer: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     intake::set_answer(&conn, intake_id, &answer)
+}
+
+/// Propose a study plan (the module manifest) from the scoping answers, caching
+/// it and advancing the subject to the `proposed` stage. Same lock discipline as
+/// intake: cache-check + gate + lock-free model call + save.
+#[tauri::command]
+pub fn learning_propose(
+    db: State<'_, Db>,
+    gate: State<'_, LearningGate>,
+    subject_id: i64,
+) -> Result<Vec<ProposedModule>, String> {
+    let (subject, intake) = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let existing = propose::list_modules(&conn, subject_id)?;
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+        let subject = store::get_subject(&conn, subject_id)?.ok_or("Subject not found.")?;
+        let intake = intake::list(&conn, subject_id)?;
+        (subject, intake)
+    };
+
+    let glock = gate.for_subject(subject_id);
+    let _g = glock.lock().unwrap_or_else(|e| e.into_inner());
+
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let existing = propose::list_modules(&conn, subject_id)?;
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+    }
+
+    let modules = propose::fetch_modules(&subject, &intake)?; // model call, no DB lock
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    propose::save_modules(&conn, subject_id, &modules)?;
+    store::set_stage(&conn, subject_id, "proposed")?;
+    propose::list_modules(&conn, subject_id)
+}
+
+#[tauri::command]
+pub fn learning_modules(db: State<'_, Db>, subject_id: i64) -> Result<Vec<ProposedModule>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    propose::list_modules(&conn, subject_id)
+}
+
+#[tauri::command]
+pub fn learning_module_set_included(db: State<'_, Db>, module_id: i64, included: bool) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    propose::set_included(&conn, module_id, included)
+}
+
+/// Lock in the edited plan and move to studying. Requires at least one included
+/// module (an empty plan has nothing to generate).
+#[tauri::command]
+pub fn learning_confirm_plan(db: State<'_, Db>, subject_id: i64) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    if propose::included_count(&conn, subject_id)? == 0 {
+        return Err("Keep at least one module to study.".into());
+    }
+    store::set_stage(&conn, subject_id, "ready")
 }

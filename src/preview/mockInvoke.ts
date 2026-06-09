@@ -114,15 +114,34 @@ const handlers: Record<string, (args?: unknown) => unknown> = {
     { id: 2, title: "Linear algebra", source_kind: "upload", stage: "proposed", created_at: "2026-05-20 00:00:00", updated_at: "2026-06-05 00:00:00" },
     { id: 3, title: "CPA — Regulation (REG)", source_kind: "describe", stage: "intake", created_at: "2026-06-02 00:00:00", updated_at: "2026-06-02 00:00:00" },
   ],
-  subject_get: () => ({
-    id: 1,
-    title: "Spanish A1",
-    source_kind: "describe",
-    source_text: "I want conversational basics for a two-week trip — ordering food, directions, small talk. Roughly 30 minutes a day.",
-    stage: "intake",
-  }),
+  subject_get: (args: any) =>
+    (args?.subjectId ?? 1) === 2
+      ? {
+          id: 2,
+          title: "Linear algebra",
+          source_kind: "upload",
+          source_text: "Course syllabus: vectors, matrices, determinants, eigenvalues, and applications.",
+          stage: "proposed",
+        }
+      : {
+          id: 1,
+          title: "Spanish A1",
+          source_kind: "describe",
+          source_text: "I want conversational basics for a two-week trip — ordering food, directions, small talk. Roughly 30 minutes a day.",
+          stage: "intake",
+        },
   subject_create: () => 9,
   subject_delete: () => null,
+  learning_modules: () => [
+    { id: 1, idx: 0, kind: "notes", title: "Vectors & vector spaces", summary: "The core objects: what a vector is, span, basis, dimension.", skill: "vectors", included: true, status: "proposed" },
+    { id: 2, idx: 1, kind: "flashcards", title: "Definitions & theorems", summary: "Key terms and results worth memorising for fast recall.", skill: "definitions", included: true, status: "proposed" },
+    { id: 3, idx: 2, kind: "quiz", title: "Matrix operations check", summary: "Retrieval practice on multiplication, inverse, and rank.", skill: "matrices", included: true, status: "proposed" },
+    { id: 4, idx: 3, kind: "notes", title: "Eigenvalues & eigenvectors", summary: "What they mean geometrically and how to find them.", skill: "eigen", included: true, status: "proposed" },
+    { id: 5, idx: 4, kind: "quiz", title: "Determinants drill", summary: "Test cofactor expansion and properties of determinants.", skill: "determinants", included: false, status: "proposed" },
+  ],
+  learning_module_set_included: () => null,
+  learning_confirm_plan: () => null,
+  learning_propose: () => [],
   learning_intake: () => [
     { id: 1, idx: 0, question: "What's your current level in Spanish — none, some words, or conversational?", answer: "A few words from school." },
     { id: 2, idx: 1, question: "What's the specific goal for this trip — ordering, directions, small talk?", answer: "All three, plus reading menus." },

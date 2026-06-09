@@ -56,3 +56,36 @@ export function learningIntake(subjectId: number): Promise<IntakeItem[]> {
 export function learningIntakeAnswer(intakeId: number, answer: string): Promise<void> {
   return invoke<void>("learning_intake_answer", { intakeId, answer });
 }
+
+// ---- L2: generative module proposal (the editable study plan) ----
+
+export type ModuleKind = "notes" | "flashcards" | "quiz" | "tutor";
+
+export interface ProposedModule {
+  id: number;
+  idx: number;
+  kind: ModuleKind;
+  title: string;
+  summary: string | null;
+  skill: string | null;
+  included: boolean;
+  status: "proposed" | "generating" | "ready" | "failed";
+}
+
+/** Propose a study plan from the scoping answers (cached; advances to proposed). */
+export function learningPropose(subjectId: number): Promise<ProposedModule[]> {
+  return invoke<ProposedModule[]>("learning_propose", { subjectId });
+}
+
+export function learningModules(subjectId: number): Promise<ProposedModule[]> {
+  return invoke<ProposedModule[]>("learning_modules", { subjectId });
+}
+
+export function learningModuleSetIncluded(moduleId: number, included: boolean): Promise<void> {
+  return invoke<void>("learning_module_set_included", { moduleId, included });
+}
+
+/** Lock in the edited plan and move to studying (needs ≥1 included module). */
+export function learningConfirmPlan(subjectId: number): Promise<void> {
+  return invoke<void>("learning_confirm_plan", { subjectId });
+}

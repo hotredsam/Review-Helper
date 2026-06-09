@@ -10,4 +10,5 @@
 pub mod commands;
 mod gen;
 pub mod intake;
+pub mod propose;
 pub mod store;

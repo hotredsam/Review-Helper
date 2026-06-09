@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import { ArrowLeft, Trash2 } from "lucide-react";
-import { type SubjectDetail as SubjectDetailData, subjectGet } from "../../api/learning";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { type SubjectDetail as SubjectDetailData, subjectGet, learningPropose } from "../../api/learning";
 import { useLearningStore } from "../../store/learningStore";
 import { IntakePane } from "./IntakePane";
+import { ModuleProposalPane } from "./ModuleProposalPane";
 
 const STAGE_LABEL: Record<string, string> = {
   intake: "Scoping",
@@ -11,22 +12,46 @@ const STAGE_LABEL: Record<string, string> = {
 };
 
 /** A single subject's workspace, routed by stage: scope it (intake grill), pick
- *  a study plan (module proposal), then study the generated materials. Later
- *  sub-phases fill in the proposed/ready stages. */
+ *  a study plan (module proposal), then study the generated materials. */
 export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack: () => void }) {
   const remove = useLearningStore((s) => s.remove);
+  const reloadList = useLearningStore((s) => s.load);
   const [detail, setDetail] = useState<SubjectDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [answered, setAnswered] = useState(0);
+  const [proposing, setProposing] = useState(false);
+
+  const load = useCallback(() => {
+    return subjectGet(subjectId)
+      .then(setDetail)
+      .catch((e) => setError(String(e)));
+  }, [subjectId]);
 
   useEffect(() => {
     setDetail(null);
     setError(null);
     setAnswered(0);
-    subjectGet(subjectId)
-      .then(setDetail)
-      .catch((e) => setError(String(e)));
-  }, [subjectId]);
+    void load();
+  }, [load]);
+
+  // Refetch the subject (e.g. after its stage advances) + refresh the list badges.
+  const reload = useCallback(async () => {
+    await load();
+    await reloadList();
+  }, [load, reloadList]);
+
+  const propose = async () => {
+    setProposing(true);
+    setError(null);
+    try {
+      await learningPropose(subjectId);
+      await reload();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setProposing(false);
+    }
+  };
 
   const onDelete = async () => {
     if (!confirm("Delete this subject and all its study materials? This can't be undone.")) return;
@@ -84,14 +109,20 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
                 <span className="text-xs text-fg-subtle">
                   {answered === 0 ? "Answer a few to tailor the plan." : `${answered} answered`}
                 </span>
-                {/* The "Propose study plan" action arrives with the proposal step. */}
+                <button
+                  onClick={() => void propose()}
+                  disabled={proposing || answered === 0}
+                  title={answered === 0 ? "Answer at least one question first" : undefined}
+                  className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+                >
+                  {proposing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  {proposing ? "Designing your plan…" : "Propose study plan"}
+                </button>
               </div>
             </>
           )}
 
-          {detail.stage === "proposed" && (
-            <p className="text-sm text-fg-subtle">Module proposal — building next.</p>
-          )}
+          {detail.stage === "proposed" && <ModuleProposalPane subjectId={subjectId} onConfirmed={() => void reload()} />}
 
           {detail.stage === "ready" && (
             <p className="text-sm text-fg-subtle">Study materials — building next.</p>
