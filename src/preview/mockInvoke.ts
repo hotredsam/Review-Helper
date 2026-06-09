@@ -19,36 +19,29 @@ const project = {
   updated_at: "2026-06-01 00:00:00",
 };
 
-const dim = (score, reason) => ({ score, reason, reason_technical: reason });
+const dim = (score, reason, tech) => ({ score, reason, reason_technical: tech });
 const assessment = {
   overall: 64,
   dimensions: {
-    architecture: dim(72, "Clear split between the screen and the data layer; a couple of files do too much."),
-    modularity: dim(58, "A few large files mix concerns — splitting them would make changes safer."),
-    context_hygiene: dim(61, "Most state is local; a couple of globals make the flow harder to follow."),
-    security: dim(80, "Secrets stay out of the code and inputs are checked before use."),
-    git_discipline: dim(55, "Commits are large; smaller, focused commits would read better."),
-    workflow: dim(60, "A plan exists, but the build doesn't always follow it step by step."),
+    architecture: dim(72, "The screen and the data live in separate places — easy to follow.", "Clear UI/data-layer split; src/api wraps every Tauri command, but two components exceed 300 lines."),
+    modularity: dim(58, "A few files are doing too much; breaking them up would help.", "3 files over 300 lines (StatePane, PlanPane, NewProjectDialog); duplicate tint() helpers."),
+    context_hygiene: dim(61, "Most of the code is easy to pick up one piece at a time.", "Mostly local zustand state; a couple of module-level singletons widen scope. CLAUDE.md present."),
+    security: dim(80, "Secrets are kept safe and inputs are checked.", "0 secret_pattern_hits; token in the macOS Keychain; prompt context fenced as untrusted data."),
+    git_discipline: dim(55, "Changes land in big chunks; smaller commits would read better.", "Large multi-file commits; prefer atomic per-task commits (git_commits=128)."),
+    workflow: dim(60, "There's a plan, but the work doesn't always follow it in order.", "PLAN.md exists; current_state drifts from the phase markers in .planning/."),
   },
   production: {
     overall: 71,
-    scores: {
-      tests: { score: 65 },
-      error_handling: { score: 70 },
-      secrets: { score: 90 },
-      build_ci: { score: 60 },
-      dependencies: { score: 75 },
-      docs: { score: 50 },
-    },
+    scores: { tests: { score: 65 }, error_handling: { score: 70 }, secrets: { score: 90 }, build_ci: { score: 60 }, dependencies: { score: 75 }, docs: { score: 50 } },
   },
   top_fixes: [
-    "Split the two biggest files so each does one thing.",
-    "Add tests around the save path so a change can't silently break it.",
-    "Write a short README so a new person can run it in a minute.",
+    { easy: "Split the two biggest files so each does one job.", technical: "Extract ScoreRow/sections out of StatePane.tsx and split PlanPane.tsx (both >300 lines)." },
+    { easy: "Add tests around saving so a change can't quietly break it.", technical: "Cover the save_into_tx → carry_into_tx path with an integration test." },
+    { easy: "Write a short README so a new person can run it.", technical: "Add a README with prerequisites + `npm run tauri dev` and the test commands." },
   ],
   hygiene: [
-    "Delete the unused scratch files in the repo root.",
-    "Pin the CI runner version so builds stay repeatable.",
+    { easy: "Delete the leftover scratch files in the main folder.", technical: "Remove the two stray Mach-O binaries at repo root (gitignored but still on disk)." },
+    { easy: "Lock the build machine version so builds stay the same.", technical: "Pin CI runs-on to macos-15 instead of macos-latest for reproducible artifacts." },
   ],
 };
 

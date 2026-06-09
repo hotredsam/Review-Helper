@@ -31,15 +31,19 @@ PRODUCTION READINESS (0–100 each): tests (scan: has_tests), error_handling, se
 
 Then give top_fixes (the 3 highest-leverage fixes, each naming a file or pattern, not "improve architecture") and hygiene (cleanup items: oversized files from the scan, dead code, unused deps — empty array if clean).
 
+Every explanatory text comes in TWO registers, both required:
+- the plain version ("reason" for dimensions; "easy" for fixes/hygiene): friendly, jargon-free, short — a non-engineer could follow it. This is the default the user reads, so make it genuinely clear, not dumbed-down.
+- the technical version ("reason_technical"; "technical"): the same point with precision — name the file, pattern, or number.
+
 OUTPUT: Emit ONLY this JSON object — nothing before or after, no ``` fences. First character `{`, last `}`:
 {
   "dimensions": {
-    "architecture": {"score": int, "reason": string},
-    "modularity": {"score": int, "reason": string},
-    "context_hygiene": {"score": int, "reason": string},
-    "security": {"score": int, "reason": string},
-    "git_discipline": {"score": int, "reason": string},
-    "workflow": {"score": int, "reason": string}
+    "architecture": {"score": int, "reason": string, "reason_technical": string},
+    "modularity": {"score": int, "reason": string, "reason_technical": string},
+    "context_hygiene": {"score": int, "reason": string, "reason_technical": string},
+    "security": {"score": int, "reason": string, "reason_technical": string},
+    "git_discipline": {"score": int, "reason": string, "reason_technical": string},
+    "workflow": {"score": int, "reason": string, "reason_technical": string}
   },
   "dimensions_overall": int,
   "production": {
@@ -51,8 +55,8 @@ OUTPUT: Emit ONLY this JSON object — nothing before or after, no ``` fences. F
     "docs": {"score": int, "reason": string}
   },
   "production_overall": int,
-  "top_fixes": [string, string, string],
-  "hygiene": [string]
+  "top_fixes": [{"easy": string, "technical": string}, {"easy": string, "technical": string}, {"easy": string, "technical": string}],
+  "hygiene": [{"easy": string, "technical": string}]
 }
 Every key must be present. This is parsed deterministically; stray text breaks it."#;
 

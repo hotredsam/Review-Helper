@@ -5,10 +5,12 @@ import { type SectionId, DEFAULT_SECTION } from "../nav/sections";
 interface UiState {
   sidebarCollapsed: boolean;
   activeSection: SectionId;
+  textMode: "easy" | "technical"; // explanatory-text register, global + persisted
   tourOpen: boolean; // ephemeral (not persisted)
   notice: string | null; // ephemeral transient confirmation
   toggleSidebar: () => void;
   setSection: (id: SectionId) => void;
+  setTextMode: (mode: "easy" | "technical") => void;
   setTourOpen: (open: boolean) => void;
   setNotice: (msg: string | null) => void;
 }
@@ -22,10 +24,12 @@ export const useUiStore = create<UiState>()(
     (set) => ({
       sidebarCollapsed: false,
       activeSection: DEFAULT_SECTION,
+      textMode: "easy",
       tourOpen: false,
       notice: null,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSection: (id) => set({ activeSection: id }),
+      setTextMode: (mode) => set({ textMode: mode }),
       setTourOpen: (open) => set({ tourOpen: open }),
       setNotice: (msg) => set({ notice: msg }),
     }),
@@ -33,7 +37,11 @@ export const useUiStore = create<UiState>()(
       name: "review-helper.ui",
       storage: createJSONStorage(() => localStorage),
       // Persist only layout — not the transient tour flag.
-      partialize: (s) => ({ sidebarCollapsed: s.sidebarCollapsed, activeSection: s.activeSection }),
+      partialize: (s) => ({
+        sidebarCollapsed: s.sidebarCollapsed,
+        activeSection: s.activeSection,
+        textMode: s.textMode,
+      }),
     },
   ),
 );

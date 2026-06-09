@@ -1,18 +1,36 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+export type TextMode = "easy" | "technical";
+
 export interface DimScore {
   score: number;
   reason: string;
+  reason_technical?: string;
 }
+
+/** A fix / hygiene item: a {easy, technical} pair, or a legacy plain string. */
+export type DualText = string | { easy?: string; technical?: string };
 
 export interface AssessmentView {
   overall: number;
   dimensions: Record<string, DimScore>;
   production: { scores: Record<string, DimScore>; overall: number };
-  top_fixes: string[];
-  hygiene: string[];
+  top_fixes: DualText[];
+  hygiene: DualText[];
   created_at: string;
+}
+
+/** A dimension's reason in the chosen register (falls back to the plain one). */
+export function pickReason(d: DimScore | undefined, mode: TextMode): string {
+  if (!d) return "";
+  return mode === "technical" ? d.reason_technical ?? d.reason : d.reason;
+}
+
+/** A fix / hygiene item in the chosen register; tolerates legacy plain strings. */
+export function pickText(item: DualText, mode: TextMode): string {
+  if (typeof item === "string") return item;
+  return (mode === "technical" ? item.technical : item.easy) ?? item.easy ?? item.technical ?? "";
 }
 
 export type AssessmentEvent =

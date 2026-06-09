@@ -12,6 +12,7 @@ import { StackPane } from "./StackPane";
 import { InboxPane } from "./InboxPane";
 import { PalettePane } from "./PalettePane";
 import { ComingSoon } from "./ComingSoon";
+import { TextModeToggle } from "./TextModeToggle";
 import { sectionById } from "../nav/sections";
 import { useUiStore } from "../store/uiStore";
 import { useProjectStore } from "../store/projectStore";
@@ -61,7 +62,10 @@ export function MainPane({ onNewProject }: Props) {
           </p>
           <h1 className="text-lg font-semibold text-fg">{section.label}</h1>
         </div>
-        {active?.github_repo_url && <RepoCache project={active} />}
+        <div className="flex items-center gap-3">
+          <TextModeToggle />
+          {active?.github_repo_url && <RepoCache project={active} />}
+        </div>
       </header>
       <div className="flex-1 overflow-auto">
         {section.id === "learn" ? (

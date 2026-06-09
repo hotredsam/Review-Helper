@@ -13,6 +13,10 @@ vi.mock("../api/assessment", () => ({
     ctrl.handler = h;
     return () => {};
   }),
+  // pure register-pickers (handle both the new {easy,technical} shape and legacy strings)
+  pickReason: (d: any, mode: string) => (d ? (mode === "technical" ? d.reason_technical ?? d.reason : d.reason) : ""),
+  pickText: (item: any, mode: string) =>
+    typeof item === "string" ? item : (mode === "technical" ? item?.technical : item?.easy) ?? item?.easy ?? item?.technical ?? "",
 }));
 
 import { useAssessStore, ensureAssessListener } from "../store/assessStore";

@@ -3,7 +3,8 @@ import { Loader2, Gauge, AlertTriangle } from "lucide-react";
 import { useAssessStore, ensureAssessListener } from "../store/assessStore";
 import { RadarChart, ScoreRing } from "./charts";
 import { InfoDot } from "./InfoDot";
-import type { DimScore } from "../api/assessment";
+import { useUiStore } from "../store/uiStore";
+import { pickReason, pickText, type DimScore, type TextMode } from "../api/assessment";
 import type { Project } from "../api/projects";
 
 const DIMENSIONS: [string, string][] = [
@@ -41,6 +42,7 @@ export function StatePane({ project }: { project: Project }) {
   const error = useAssessStore((s) => s.error[project.id]);
   const load = useAssessStore((s) => s.load);
   const assess = useAssessStore((s) => s.assess);
+  const textMode = useUiStore((s) => s.textMode);
 
   useEffect(() => {
     ensureAssessListener();
@@ -132,7 +134,7 @@ export function StatePane({ project }: { project: Project }) {
           />
         </h2>
         {DIMENSIONS.map(([key, label]) => (
-          <ScoreRow key={key} label={label} dim={assessment.dimensions?.[key]} />
+          <ScoreRow key={key} label={label} dim={assessment.dimensions?.[key]} mode={textMode} />
         ))}
       </section>
 
@@ -161,7 +163,7 @@ export function StatePane({ project }: { project: Project }) {
           <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Top fixes</h2>
           <ol className="list-inside list-decimal space-y-1 text-sm text-fg">
             {assessment.top_fixes.map((f, i) => (
-              <li key={i}>{f}</li>
+              <li key={i}>{pickText(f, textMode)}</li>
             ))}
           </ol>
         </section>
@@ -172,7 +174,7 @@ export function StatePane({ project }: { project: Project }) {
           <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Hygiene / cleanup</h2>
           <ul className="list-inside list-disc space-y-1 text-sm text-fg-muted">
             {assessment.hygiene.map((h, i) => (
-              <li key={i}>{h}</li>
+              <li key={i}>{pickText(h, textMode)}</li>
             ))}
           </ul>
         </section>
@@ -181,10 +183,11 @@ export function StatePane({ project }: { project: Project }) {
   );
 }
 
-function ScoreRow({ label, dim }: { label: string; dim?: DimScore }) {
+function ScoreRow({ label, dim, mode }: { label: string; dim?: DimScore; mode: TextMode }) {
   const score = dim?.score ?? 0;
   const t = tint(score);
   const width = Math.max(0, Math.min(100, score));
+  const reason = pickReason(dim, mode);
   return (
     <div>
       <div className="flex items-baseline justify-between text-sm">
@@ -194,7 +197,7 @@ function ScoreRow({ label, dim }: { label: string; dim?: DimScore }) {
       <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
         <div className={"h-full rounded-full " + t.bg} style={{ width: `${width}%` }} />
       </div>
-      {dim?.reason && <p className="mt-0.5 text-xs text-fg-subtle">{dim.reason}</p>}
+      {reason && <p className="mt-0.5 text-xs text-fg-subtle">{reason}</p>}
     </div>
   );
 }
