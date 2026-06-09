@@ -16,3 +16,4 @@ pub mod profile;
 pub mod propose;
 pub mod schedule;
 pub mod store;
+pub mod tutor;

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { FileText, Layers, ListChecks, Loader2, TrendingUp, type LucideIcon } from "lucide-react";
+import { FileText, Layers, ListChecks, Loader2, MessageCircle, TrendingUp, type LucideIcon } from "lucide-react";
 import { type ModuleKind, type ProposedModule, learningModules } from "../../api/learning";
 import { NotesPane } from "./NotesPane";
 import { FlashcardsPane } from "./FlashcardsPane";
 import { QuizPane } from "./QuizPane";
 import { ProgressPane } from "./ProgressPane";
+import { TutorPane } from "./TutorPane";
 
 const KIND_ICON: Record<ModuleKind, LucideIcon> = {
   notes: FileText,
@@ -76,6 +77,7 @@ export function StudyView({ subjectId }: { subjectId: number }) {
         {modules.map((m) => (
           <TabButton key={m.id} id={`m${m.id}`} label={m.title} icon={KIND_ICON[m.kind] ?? FileText} />
         ))}
+        <TabButton id="tutor" label="Tutor" icon={MessageCircle} />
         <TabButton id="progress" label="Progress" icon={TrendingUp} />
       </div>
 
@@ -83,6 +85,7 @@ export function StudyView({ subjectId }: { subjectId: number }) {
         {active?.kind === "notes" && <NotesPane moduleId={active.id} />}
         {active?.kind === "flashcards" && <FlashcardsPane moduleId={active.id} />}
         {active?.kind === "quiz" && <QuizPane moduleId={active.id} />}
+        {tab === "tutor" && <TutorPane subjectId={subjectId} />}
         {tab === "progress" && <ProgressPane subjectId={subjectId} />}
       </div>
     </div>

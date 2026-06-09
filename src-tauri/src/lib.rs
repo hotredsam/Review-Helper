@@ -151,6 +151,8 @@ pub fn run() {
             learning::commands::learning_flashcard_grade,
             learning::commands::learning_quiz_answer,
             learning::commands::learning_progress,
+            learning::commands::learning_tutor_history,
+            learning::commands::learning_tutor_send,
             projects::create_project,
             projects::list_projects,
             projects::get_project,

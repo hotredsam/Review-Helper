@@ -14,6 +14,7 @@ use super::materials::{self, Flashcard, QuizQuestion};
 use super::profile::{self, ProfileSnapshot};
 use super::propose::{self, ProposedModule};
 use super::store::{self, Subject, SubjectDetail};
+use super::tutor::{self, TutorMsg};
 use super::{mastery, schedule};
 use crate::db::Db;
 
@@ -328,4 +329,39 @@ pub fn learning_quiz_answer(
 pub fn learning_progress(db: State<'_, Db>, subject_id: i64) -> Result<ProfileSnapshot, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     profile::snapshot(&conn, subject_id)
+}
+
+// ---- L5: the tutor (adaptive per-subject chat) ----
+
+#[tauri::command]
+pub fn learning_tutor_history(db: State<'_, Db>, subject_id: i64) -> Result<Vec<TutorMsg>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    tutor::history(&conn, subject_id)
+}
+
+/// Send a message to the subject's tutor. Loads the subject + bounded learner
+/// profile + prior history under a brief lock, persists the user message, then
+/// makes the model call WITHOUT the lock and persists the reply. The profile is
+/// numbers-only (no "learning style"); the model adapts difficulty from it.
+#[tauri::command]
+pub fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: String) -> Result<String, String> {
+    let message = message.trim().to_string();
+    if message.is_empty() {
+        return Err("Type a message first.".into());
+    }
+    if message.chars().count() > 20_000 {
+        return Err("Message is too long (max 20000 characters).".into());
+    }
+    let (subject, profile_block, hist) = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let subject = store::get_subject(&conn, subject_id)?.ok_or("Subject not found.")?;
+        let profile_block = profile::snapshot_prompt(&conn, subject_id)?;
+        let hist = tutor::history(&conn, subject_id)?; // prior turns (before this message)
+        tutor::add(&conn, subject_id, "user", &message)?;
+        (subject, profile_block, hist)
+    };
+    let reply = tutor::reply(&subject, &profile_block, &hist, &message)?; // model call, no DB lock
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    tutor::add(&conn, subject_id, "assistant", &reply)?;
+    Ok(reply)
 }

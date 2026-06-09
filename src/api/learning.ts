@@ -161,3 +161,20 @@ export function learningQuizAnswer(
 export function learningProgress(subjectId: number): Promise<ProfileSnapshot> {
   return invoke<ProfileSnapshot>("learning_progress", { subjectId });
 }
+
+// ---- L5: the tutor (adaptive per-subject chat) ----
+
+export interface TutorMsg {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export function learningTutorHistory(subjectId: number): Promise<TutorMsg[]> {
+  return invoke<TutorMsg[]>("learning_tutor_history", { subjectId });
+}
+
+/** Send a message to the subject's tutor; returns the reply. The tutor adapts to
+ *  the bounded learner profile (mastery + pace), never a "learning style". */
+export function learningTutorSend(subjectId: number, message: string): Promise<string> {
+  return invoke<string>("learning_tutor_send", { subjectId, message });
+}

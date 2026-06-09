@@ -155,6 +155,13 @@ const handlers: Record<string, (args?: unknown) => unknown> = {
     { id: 202, question: "Which phrase means “thank you”?", options: ["Hola", "Por favor", "Gracias", "Adiós"], answer_idx: 2, explanation: "“Gracias” is thank you; “por favor” is please." },
     { id: 203, question: "You want directions. What do you ask?", options: ["¿Dónde está…?", "¿Cuánto cuesta?", "Buenos días", "La cuenta"], answer_idx: 0, explanation: "“¿Dónde está…?” = “Where is…?”" },
   ],
+  learning_tutor_history: () => [
+    { role: "user", content: "How do I ask where the bathroom is?" },
+    { role: "assistant", content: "**¿Dónde está el baño?** — literally “where is the bathroom?”. In a café you can soften it: *“Perdón, ¿dónde está el baño?”* (“Excuse me, …”). You're solid on greetings, so this fits right in." },
+    { role: "user", content: "What if there's more than one?" },
+    { role: "assistant", content: "Use **los baños** (plural): *“¿Dónde están los baños?”* — note **están** (plural) instead of **está**. Quick check: how would you ask for *the menus* (plural of *el menú*)?" },
+  ],
+  learning_tutor_send: () => "Good question. Since you're strong on basics but still building phrases, here's a simple pattern…",
   learning_flashcard_grade: () => "2026-06-12T00:00:00+00:00",
   learning_quiz_answer: (args: any) => ({ correct: (args?.choiceIdx ?? 0) === 1, answer_idx: 1, explanation: "“¿Cuánto cuesta?” means “How much does it cost?”", p_known: 0.62 }),
   learning_progress: () => ({
