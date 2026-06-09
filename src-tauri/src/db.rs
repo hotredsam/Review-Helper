@@ -60,6 +60,25 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
         migrate_v3(conn)?;
         conn.pragma_update(None, "user_version", 3)?;
     }
+    if version < 4 {
+        migrate_v4(conn)?;
+        conn.pragma_update(None, "user_version", 4)?;
+    }
+    Ok(())
+}
+
+/// v4: add `questions.ui_spec` (model-emitted input UI per grill question).
+/// Guarded by a column-existence check so it's idempotent — fresh databases
+/// already carry the column from schema.sql, so the ALTER is skipped there.
+fn migrate_v4(conn: &Connection) -> rusqlite::Result<()> {
+    let has_col: bool = conn
+        .prepare("PRAGMA table_info(questions)")?
+        .query_map([], |r| r.get::<_, String>(1))?
+        .filter_map(Result::ok)
+        .any(|name| name == "ui_spec");
+    if !has_col {
+        conn.execute_batch("ALTER TABLE questions ADD COLUMN ui_spec TEXT;")?;
+    }
     Ok(())
 }
 
@@ -155,7 +174,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
     }
 
     #[test]

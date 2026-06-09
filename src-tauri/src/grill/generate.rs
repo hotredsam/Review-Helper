@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::sync::OnceLock;
 
 use rusqlite::Connection;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::plan::parse::{extract_json, flexible_string};
 
@@ -17,14 +17,74 @@ pub const GRILL_SYSTEM: &str = r#"You are Review Helper's interviewer. You ask t
 You are given a list of TOPICS, each with a dimension and a focus hint. For EACH topic, write:
 - "question": ONE specific question about THIS project — concrete, answerable, grounded in what you actually see. Never generic ("What is your architecture?"); name the real thing.
 - "recommended_answer": your best-guess answer given the repo + plan + context — the answer you'd suggest if the builder is unsure. Honest and specific. Only say it's unknowable if it truly is.
+- "ui_spec": the lightest input WIDGET for the answer, so the builder answers fast instead of writing a paragraph. An object {"field": ...}:
+    • "single_choice" + "options":[2–5 concrete, project-grounded choices] — when the answer is one pick from a few real options.
+    • "multi_choice" + "options":[...] — when several may apply.
+    • "scale" + "min","max" (and optional "min_label"/"max_label") — for a degree/size/priority (e.g. 1–5).
+    • "short_text" — a brief name/number/phrase.
+    • "long_text" — ONLY when a free paragraph is genuinely needed.
+  Prefer choices and scales over long_text. The recommended_answer must be consistent with the widget (e.g. one of the options).
 
 Echo the given dimension and bank_topic verbatim.
 
 OUTPUT: Emit ONLY this JSON object — nothing before or after, no ``` fences. First character {, last }:
 {"questions": [
-  {"dimension": "...", "bank_topic": "...", "question": "...", "recommended_answer": "..."}
+  {"dimension": "...", "bank_topic": "...", "question": "...", "recommended_answer": "...",
+   "ui_spec": {"field": "single_choice|multi_choice|scale|short_text|long_text", "options": ["..."], "min": int, "max": int, "min_label": "...", "max_label": "..."}}
 ]}
 One object per provided topic, same order. This is parsed deterministically; stray text breaks it."#;
+
+/// The model-emitted input UI for a question's answer. Normalized after parse so
+/// `field` is always one of the known widgets and choice fields carry options.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct UiSpec {
+    #[serde(default, deserialize_with = "flexible_string")]
+    pub field: String,
+    #[serde(default)]
+    pub options: Vec<String>,
+    #[serde(default)]
+    pub min: Option<i64>,
+    #[serde(default)]
+    pub max: Option<i64>,
+    #[serde(default)]
+    pub min_label: Option<String>,
+    #[serde(default)]
+    pub max_label: Option<String>,
+}
+
+const UI_FIELDS: [&str; 5] = ["single_choice", "multi_choice", "scale", "short_text", "long_text"];
+
+/// Make a model UI spec safe to render: unknown fields and option-less choice
+/// fields fall back to `long_text` (the original free-text widget); scales get
+/// sane bounds. Never panics — bad/missing specs degrade gracefully.
+pub fn normalize_ui_spec(spec: Option<UiSpec>) -> UiSpec {
+    let mut s = spec.unwrap_or_default();
+    if !UI_FIELDS.contains(&s.field.as_str()) {
+        s.field = "long_text".into();
+    }
+    let is_choice = s.field == "single_choice" || s.field == "multi_choice";
+    if is_choice && s.options.iter().filter(|o| !o.trim().is_empty()).count() < 2 {
+        s.field = "long_text".into();
+    }
+    if s.field != "single_choice" && s.field != "multi_choice" {
+        s.options.clear();
+    } else {
+        s.options.retain(|o| !o.trim().is_empty());
+        s.options.truncate(6);
+    }
+    if s.field == "scale" {
+        let min = s.min.unwrap_or(1);
+        let max = s.max.unwrap_or(5);
+        s.min = Some(min);
+        s.max = Some(if max > min { max } else { min + 4 });
+    } else {
+        s.min = None;
+        s.max = None;
+        s.min_label = None;
+        s.max_label = None;
+    }
+    s
+}
 
 #[derive(Debug, Deserialize)]
 pub struct GenQuestion {
@@ -36,6 +96,8 @@ pub struct GenQuestion {
     pub question: String,
     #[serde(deserialize_with = "flexible_string")]
     pub recommended_answer: String,
+    #[serde(default)]
+    pub ui_spec: Option<UiSpec>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,6 +199,10 @@ pub fn parse_questions(raw: &str) -> Result<Vec<GenQuestion>, String> {
                 && !q.bank_topic.trim().is_empty()
                 && q.question.len() <= MAX_FIELD
                 && q.recommended_answer.len() <= MAX_FIELD
+        })
+        .map(|mut q| {
+            q.ui_spec = Some(normalize_ui_spec(q.ui_spec.take()));
+            q
         })
         .collect();
     if qs.is_empty() {

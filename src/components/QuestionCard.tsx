@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Loader2, Check, X, HelpCircle, MessagesSquare, Trash2, type LucideIcon } from "lucide-react";
 import { useGrillStore } from "../store/grillStore";
+import { QuestionInput } from "./QuestionInput";
 import type { Question } from "../api/grill";
 
 /**
@@ -57,14 +58,11 @@ export function QuestionCard({ projectId, question }: { projectId: number; quest
         </p>
       )}
 
-      <textarea
+      <QuestionInput
+        spec={question.ui_spec}
         value={body}
-        onChange={(e) => setBody(e.target.value)}
-        rows={2}
-        maxLength={10000}
-        aria-label={`Answer: ${question.text}`}
-        placeholder="Your answer…"
-        className="mt-2 w-full rounded-md border border-border bg-surface-2 px-2 py-1.5 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
+        onChange={setBody}
+        ariaLabel={`Answer: ${question.text}`}
       />
 
       <div className="mt-2 flex flex-wrap gap-2">

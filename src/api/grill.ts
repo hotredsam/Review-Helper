@@ -1,12 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+export interface UiSpec {
+  field: "single_choice" | "multi_choice" | "scale" | "short_text" | "long_text";
+  options?: string[];
+  min?: number;
+  max?: number;
+  min_label?: string;
+  max_label?: string;
+}
+
 export interface Question {
   id: number;
   dimension: string | null;
   bank_topic: string | null;
   text: string;
   recommended_answer: string | null;
+  ui_spec?: UiSpec | null;
   status: string;
 }
 

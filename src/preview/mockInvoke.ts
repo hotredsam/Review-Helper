@@ -65,8 +65,10 @@ const plan = {
 };
 
 const questions = [
-  { id: 1, dimension: "scope", bank_topic: "MVP boundary", text: "What's the smallest version of this that's still useful to you?", recommended_answer: "Create, list, and edit notes — no sharing yet.", status: "open" },
-  { id: 2, dimension: "users", bank_topic: "Primary user", text: "Who is the main person using this, and what are they trying to get done?", recommended_answer: "Just me, capturing meeting notes quickly.", status: "open" },
+  { id: 1, dimension: "scope", bank_topic: "MVP boundary", text: "What's the smallest version of this that's still useful?", recommended_answer: "Create + list notes", ui_spec: { field: "single_choice", options: ["Create + list notes", "Add edit + delete", "Add search", "Add sharing"] }, status: "open" },
+  { id: 2, dimension: "users", bank_topic: "Primary user", text: "Who is the main person using this?", recommended_answer: "Solo note-taker", ui_spec: { field: "short_text" }, status: "open" },
+  { id: 3, dimension: "scope", bank_topic: "Priority", text: "How important is offline support for v1?", recommended_answer: "3", ui_spec: { field: "scale", min: 1, max: 5, min_label: "Nice-to-have", max_label: "Must-have" }, status: "open" },
+  { id: 4, dimension: "data", bank_topic: "Entities", text: "Which of these does a note need to store?", recommended_answer: "Title, Body, Timestamp", ui_spec: { field: "multi_choice", options: ["Title", "Body", "Tags", "Timestamp", "Author"] }, status: "open" },
 ];
 
 const stackCatalog = {

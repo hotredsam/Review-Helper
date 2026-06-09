@@ -41,6 +41,7 @@ CREATE TABLE questions (
   id INTEGER PRIMARY KEY,
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   dimension TEXT, bank_topic TEXT, text TEXT NOT NULL, recommended_answer TEXT,
+  ui_spec TEXT, -- model-emitted input UI spec (JSON): field type + options
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','answered','not_relevant','unknown','deleted')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
