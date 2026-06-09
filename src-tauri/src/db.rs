@@ -68,7 +68,103 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
         migrate_v5(conn)?;
         conn.pragma_update(None, "user_version", 5)?;
     }
+    if version < 6 {
+        migrate_v6(conn)?;
+        conn.pragma_update(None, "user_version", 6)?;
+    }
     Ok(())
+}
+
+/// v6: Learning mode — subjects, intake-grill, the proposed module manifest, and
+/// the generated materials (notes/flashcards/quiz/tutor) plus the adaptive
+/// learner model (per-skill BKT mastery + a pace/engagement profile). All
+/// `CREATE … IF NOT EXISTS` with no inbound FKs from old tables — idempotent; a
+/// no-op on fresh DBs that already carry these from schema.sql.
+fn migrate_v6(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS learning_subjects (
+           id INTEGER PRIMARY KEY,
+           title TEXT NOT NULL,
+           source_kind TEXT NOT NULL CHECK (source_kind IN ('describe','upload')),
+           source_text TEXT,
+           stage TEXT NOT NULL DEFAULT 'intake' CHECK (stage IN ('intake','proposed','ready')),
+           created_at TEXT NOT NULL DEFAULT (datetime('now')),
+           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS learning_intake (
+           id INTEGER PRIMARY KEY,
+           subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+           idx INTEGER NOT NULL, question TEXT NOT NULL, answer TEXT,
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS learning_modules (
+           id INTEGER PRIMARY KEY,
+           subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+           idx INTEGER NOT NULL,
+           kind TEXT NOT NULL CHECK (kind IN ('notes','flashcards','quiz','tutor')),
+           title TEXT NOT NULL, summary TEXT, skill TEXT,
+           included INTEGER NOT NULL DEFAULT 1,
+           status TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed','generating','ready','failed')),
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS learning_notes (
+           id INTEGER PRIMARY KEY,
+           module_id INTEGER NOT NULL REFERENCES learning_modules(id) ON DELETE CASCADE,
+           body_md TEXT NOT NULL,
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS learning_flashcards (
+           id INTEGER PRIMARY KEY,
+           module_id INTEGER NOT NULL REFERENCES learning_modules(id) ON DELETE CASCADE,
+           subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+           skill TEXT, front TEXT NOT NULL, back TEXT NOT NULL,
+           fsrs_json TEXT, due TEXT, reps INTEGER NOT NULL DEFAULT 0,
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS learning_quiz_questions (
+           id INTEGER PRIMARY KEY,
+           module_id INTEGER NOT NULL REFERENCES learning_modules(id) ON DELETE CASCADE,
+           subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+           skill TEXT, question TEXT NOT NULL, options TEXT NOT NULL,
+           answer_idx INTEGER NOT NULL, explanation TEXT,
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS learning_quiz_attempts (
+           id INTEGER PRIMARY KEY,
+           question_id INTEGER NOT NULL REFERENCES learning_quiz_questions(id) ON DELETE CASCADE,
+           subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+           correct INTEGER NOT NULL, latency_ms INTEGER,
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS learning_skill_mastery (
+           subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+           skill TEXT NOT NULL,
+           p_known REAL NOT NULL DEFAULT 0.3, n_obs INTEGER NOT NULL DEFAULT 0,
+           updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+           PRIMARY KEY (subject_id, skill)
+         );
+         CREATE TABLE IF NOT EXISTS learning_tutor_messages (
+           id INTEGER PRIMARY KEY,
+           subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+           role TEXT NOT NULL CHECK (role IN ('user','assistant')),
+           content TEXT NOT NULL,
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS learning_profile (
+           subject_id INTEGER PRIMARY KEY REFERENCES learning_subjects(id) ON DELETE CASCADE,
+           sessions INTEGER NOT NULL DEFAULT 0,
+           total_attempts INTEGER NOT NULL DEFAULT 0,
+           total_correct INTEGER NOT NULL DEFAULT 0,
+           total_latency_ms INTEGER NOT NULL DEFAULT 0,
+           flashcard_reviews INTEGER NOT NULL DEFAULT 0,
+           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE INDEX IF NOT EXISTS idx_learning_intake ON learning_intake(subject_id, idx);
+         CREATE INDEX IF NOT EXISTS idx_learning_modules ON learning_modules(subject_id, idx);
+         CREATE INDEX IF NOT EXISTS idx_learning_flashcards_due ON learning_flashcards(subject_id, due);
+         CREATE INDEX IF NOT EXISTS idx_learning_quiz ON learning_quiz_questions(subject_id);
+         CREATE INDEX IF NOT EXISTS idx_learning_tutor ON learning_tutor_messages(subject_id, id);",
+    )
 }
 
 /// v5: Understand-hub additions — per-project card membership, cached premade
@@ -187,8 +283,8 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        // schema.sql defines 18 tables (15 + project_cards + card_questions + card_chat_messages).
-        assert_eq!(count, 18);
+        // schema.sql defines 28 tables (18 + the 10 learning_* tables from v6).
+        assert_eq!(count, 28);
     }
 
     #[test]
@@ -208,7 +304,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
     }
 
     #[test]

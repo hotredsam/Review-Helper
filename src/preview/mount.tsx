@@ -10,8 +10,11 @@ export function mount(pane: string, theme: string) {
   localStorage.setItem("rh.tour.seen", "1"); // skip the first-run tour
   useThemeStore.getState().setTheme(theme); // applies data-theme via the store subscription
   const text = new URLSearchParams(location.search).get("text");
+  // Learning-mode panes ("learning", "learning-*") flip the top-level appMode.
+  const learning = pane.startsWith("learning");
   useUiStore.setState({
-    activeSection: pane,
+    activeSection: learning ? "overview" : pane,
+    appMode: learning ? "learning" : "code",
     sidebarCollapsed: false,
     textMode: text === "technical" ? "technical" : "easy",
   });

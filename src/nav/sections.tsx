@@ -8,13 +8,12 @@ import {
   MessagesSquare,
   Inbox,
   Palette,
-  GraduationCap,
   Settings,
   type LucideIcon,
 } from "lucide-react";
 
-/** The navigable pane regions of the app. Each future phase fills in one of
- *  these; for now every region renders a clean empty state. */
+/** The navigable pane regions of the *code* shell. Learning mode (a top-level
+ *  appMode) has its own nav and is not a section here. */
 export type SectionId =
   | "overview"
   | "understand"
@@ -25,7 +24,6 @@ export type SectionId =
   | "chat"
   | "inbox"
   | "palette"
-  | "learn"
   | "settings";
 
 export interface Section {
@@ -109,13 +107,6 @@ export const SECTIONS: Section[] = [
     emptyTitle: "Color palette planner",
     emptyBody:
       "Design a frontend color theme and see it rendered as a generative app icon and a UI mock.",
-  },
-  {
-    id: "learn",
-    label: "Learn",
-    icon: GraduationCap,
-    emptyTitle: "Learning mode — coming soon",
-    emptyBody: "A future mode for structured study beyond vibecoding (e.g. CPA exam prep). Not available yet.",
   },
   {
     id: "settings",

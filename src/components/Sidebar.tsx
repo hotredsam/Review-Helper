@@ -1,20 +1,27 @@
-import { Menu } from "lucide-react";
+import { Menu, GraduationCap } from "lucide-react";
 import { SECTIONS } from "../nav/sections";
 import { useUiStore } from "../store/uiStore";
+import { useLearningStore } from "../store/learningStore";
 import { ProjectSwitcher } from "./ProjectSwitcher";
+import { ModeToggle } from "./ModeToggle";
 
 interface Props {
   onNewProject: () => void;
   hasProject: boolean;
 }
 
-/** Left rail: hamburger toggle, project switcher, and the section nav. Sections
- *  other than Settings and the Learn stub are disabled until a project exists. */
+/** Left rail: hamburger toggle, the Code↔Learning mode switch, and mode-specific
+ *  nav. In code mode: project switcher + section nav (disabled until a project
+ *  exists, except Settings and the Palette planner). In learning mode: the
+ *  subject library home. */
 export function Sidebar({ onNewProject, hasProject }: Props) {
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
   const toggle = useUiStore((s) => s.toggleSidebar);
   const active = useUiStore((s) => s.activeSection);
   const setSection = useUiStore((s) => s.setSection);
+  const appMode = useUiStore((s) => s.appMode);
+  const selectedSubject = useLearningStore((s) => s.selectedSubjectId);
+  const selectSubject = useLearningStore((s) => s.select);
 
   return (
     <aside
@@ -32,42 +39,62 @@ export function Sidebar({ onNewProject, hasProject }: Props) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        {!collapsed && (
-          <span className="truncate text-sm font-semibold text-fg">Review Helper</span>
-        )}
+        {!collapsed && <span className="truncate text-sm font-semibold text-fg">Review Helper</span>}
       </div>
 
-      <ProjectSwitcher collapsed={collapsed} onNewProject={onNewProject} />
+      <ModeToggle collapsed={collapsed} />
 
-      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
-        {SECTIONS.map((s) => {
-          const Icon = s.icon;
-          const isActive = s.id === active;
-          const disabled =
-            !hasProject && s.id !== "settings" && s.id !== "learn" && s.id !== "palette";
-          return (
-            <button
-              key={s.id}
-              onClick={() => setSection(s.id)}
-              disabled={disabled}
-              aria-label={s.label}
-              aria-current={isActive ? "page" : undefined}
-              title={collapsed ? s.label : undefined}
-              className={
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 " +
-                (collapsed ? "justify-center " : "") +
-                (isActive
-                  ? "bg-accent/10 font-medium text-fg"
-                  : "text-fg-muted hover:bg-surface-2 hover:text-fg") +
-                (disabled ? " cursor-not-allowed opacity-40 hover:bg-transparent hover:text-fg-muted" : "")
-              }
-            >
-              <Icon className="h-5 w-5 shrink-0" strokeWidth={1.75} />
-              {!collapsed && <span className="truncate">{s.label}</span>}
-            </button>
-          );
-        })}
-      </nav>
+      {appMode === "learning" ? (
+        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
+          <button
+            onClick={() => selectSubject(null)}
+            aria-current={selectedSubject == null ? "page" : undefined}
+            title={collapsed ? "Subjects" : undefined}
+            className={
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors " +
+              (collapsed ? "justify-center " : "") +
+              (selectedSubject == null
+                ? "bg-accent/10 font-medium text-fg"
+                : "text-fg-muted hover:bg-surface-2 hover:text-fg")
+            }
+          >
+            <GraduationCap className="h-5 w-5 shrink-0" strokeWidth={1.75} />
+            {!collapsed && <span className="truncate">Subjects</span>}
+          </button>
+        </nav>
+      ) : (
+        <>
+          <ProjectSwitcher collapsed={collapsed} onNewProject={onNewProject} />
+          <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
+            {SECTIONS.map((s) => {
+              const Icon = s.icon;
+              const isActive = s.id === active;
+              const disabled = !hasProject && s.id !== "settings" && s.id !== "palette";
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setSection(s.id)}
+                  disabled={disabled}
+                  aria-label={s.label}
+                  aria-current={isActive ? "page" : undefined}
+                  title={collapsed ? s.label : undefined}
+                  className={
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 " +
+                    (collapsed ? "justify-center " : "") +
+                    (isActive
+                      ? "bg-accent/10 font-medium text-fg"
+                      : "text-fg-muted hover:bg-surface-2 hover:text-fg") +
+                    (disabled ? " cursor-not-allowed opacity-40 hover:bg-transparent hover:text-fg-muted" : "")
+                  }
+                >
+                  <Icon className="h-5 w-5 shrink-0" strokeWidth={1.75} />
+                  {!collapsed && <span className="truncate">{s.label}</span>}
+                </button>
+              );
+            })}
+          </nav>
+        </>
+      )}
     </aside>
   );
 }

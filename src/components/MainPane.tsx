@@ -11,7 +11,7 @@ import { DecisionsPane } from "./DecisionsPane";
 import { StackPane } from "./StackPane";
 import { InboxPane } from "./InboxPane";
 import { PalettePane } from "./PalettePane";
-import { ComingSoon } from "./ComingSoon";
+import { LearningShell } from "./learning/LearningShell";
 import { TextModeToggle } from "./TextModeToggle";
 import { sectionById } from "../nav/sections";
 import { useUiStore } from "../store/uiStore";
@@ -26,14 +26,27 @@ interface Props {
  *  coming-soon stub, or a clean empty state). */
 export function MainPane({ onNewProject }: Props) {
   const activeSectionId = useUiStore((s) => s.activeSection);
+  const appMode = useUiStore((s) => s.appMode);
   const projects = useProjectStore((s) => s.projects);
   const activeId = useProjectStore((s) => s.activeProjectId);
   const active = projects.find((p) => p.id === activeId) ?? null;
   const section = sectionById(activeSectionId);
 
-  // No project: only Settings, the Palette planner, and the coming-soon Learn
-  // stub are reachable; everything else invites creating one.
-  if (!active && section.id !== "settings" && section.id !== "learn" && section.id !== "palette") {
+  // Learning mode is a separate top-level shell (its own subjects + nav),
+  // unrelated to code projects.
+  if (appMode === "learning") {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="flex-1 overflow-auto">
+          <LearningShell />
+        </div>
+      </div>
+    );
+  }
+
+  // No project: only Settings and the Palette planner are reachable; everything
+  // else invites creating one.
+  if (!active && section.id !== "settings" && section.id !== "palette") {
     return (
       <div className="flex h-full flex-col">
         <EmptyState
@@ -68,9 +81,7 @@ export function MainPane({ onNewProject }: Props) {
         </div>
       </header>
       <div className="flex-1 overflow-auto">
-        {section.id === "learn" ? (
-          <ComingSoon />
-        ) : section.id === "palette" ? (
+        {section.id === "palette" ? (
           <PalettePane />
         ) : section.id === "settings" ? (
           <SettingsView />

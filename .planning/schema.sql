@@ -146,3 +146,98 @@ CREATE TABLE card_chat_messages (
 );
 CREATE INDEX idx_card_questions_term ON card_questions(term);
 CREATE INDEX idx_card_chat ON card_chat_messages(project_id, term, id);
+
+-- Learning mode (v6): subjects the user wants to study, independent of code
+-- projects. Evidence-based (per deep-research): retrieval practice + spaced
+-- repetition (FSRS, stored per flashcard) + per-skill mastery (Bayesian
+-- Knowledge Tracing, learning_skill_mastery). No "learning styles" — the
+-- learner profile adapts on real interaction signals only.
+CREATE TABLE learning_subjects (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  source_kind TEXT NOT NULL CHECK (source_kind IN ('describe','upload')),
+  source_text TEXT,                 -- described goal or extracted upload text (bounded)
+  stage TEXT NOT NULL DEFAULT 'intake' CHECK (stage IN ('intake','proposed','ready')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE learning_intake (
+  id INTEGER PRIMARY KEY,
+  subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+  idx INTEGER NOT NULL,
+  question TEXT NOT NULL,
+  answer TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE learning_modules (
+  id INTEGER PRIMARY KEY,
+  subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+  idx INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('notes','flashcards','quiz','tutor')),
+  title TEXT NOT NULL, summary TEXT, skill TEXT,
+  included INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed','generating','ready','failed')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE learning_notes (
+  id INTEGER PRIMARY KEY,
+  module_id INTEGER NOT NULL REFERENCES learning_modules(id) ON DELETE CASCADE,
+  body_md TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE learning_flashcards (
+  id INTEGER PRIMARY KEY,
+  module_id INTEGER NOT NULL REFERENCES learning_modules(id) ON DELETE CASCADE,
+  subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+  skill TEXT, front TEXT NOT NULL, back TEXT NOT NULL,
+  fsrs_json TEXT,                   -- serialized rs-fsrs Card state (null until first review)
+  due TEXT,                         -- next due (datetime) for the review queue
+  reps INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE learning_quiz_questions (
+  id INTEGER PRIMARY KEY,
+  module_id INTEGER NOT NULL REFERENCES learning_modules(id) ON DELETE CASCADE,
+  subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+  skill TEXT, question TEXT NOT NULL,
+  options TEXT NOT NULL,            -- JSON array of choices
+  answer_idx INTEGER NOT NULL,      -- index of the correct choice
+  explanation TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE learning_quiz_attempts (
+  id INTEGER PRIMARY KEY,
+  question_id INTEGER NOT NULL REFERENCES learning_quiz_questions(id) ON DELETE CASCADE,
+  subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+  correct INTEGER NOT NULL, latency_ms INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE learning_skill_mastery (
+  subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+  skill TEXT NOT NULL,
+  p_known REAL NOT NULL DEFAULT 0.3, -- Bayesian Knowledge Tracing mastery estimate
+  n_obs INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (subject_id, skill)
+);
+CREATE TABLE learning_tutor_messages (
+  id INTEGER PRIMARY KEY,
+  subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user','assistant')),
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE learning_profile (
+  subject_id INTEGER PRIMARY KEY REFERENCES learning_subjects(id) ON DELETE CASCADE,
+  sessions INTEGER NOT NULL DEFAULT 0,
+  total_attempts INTEGER NOT NULL DEFAULT 0,
+  total_correct INTEGER NOT NULL DEFAULT 0,
+  total_latency_ms INTEGER NOT NULL DEFAULT 0,
+  flashcard_reviews INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_learning_intake ON learning_intake(subject_id, idx);
+CREATE INDEX idx_learning_modules ON learning_modules(subject_id, idx);
+CREATE INDEX idx_learning_flashcards_due ON learning_flashcards(subject_id, due);
+CREATE INDEX idx_learning_quiz ON learning_quiz_questions(subject_id);
+CREATE INDEX idx_learning_tutor ON learning_tutor_messages(subject_id, id);

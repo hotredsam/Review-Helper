@@ -12,6 +12,7 @@ mod features;
 mod db;
 mod github;
 mod grill;
+mod learning;
 pub mod model;
 mod plan;
 mod projects;
@@ -67,6 +68,7 @@ pub fn run() {
             app.manage(cards::commands::CardGate::default());
             app.manage(grill::commands::GrillGate::default());
             app.manage(plan::commands::PlanGate::default());
+            app.manage(learning::commands::LearningGate::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -133,6 +135,10 @@ pub fn run() {
             stack::commands::stack_list,
             stack::commands::stack_set,
             stack::commands::stack_apply_premade,
+            learning::commands::subject_create,
+            learning::commands::subjects_list,
+            learning::commands::subject_get,
+            learning::commands::subject_delete,
             projects::create_project,
             projects::list_projects,
             projects::get_project,

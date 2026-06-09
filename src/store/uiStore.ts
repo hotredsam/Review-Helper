@@ -2,14 +2,18 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { type SectionId, DEFAULT_SECTION } from "../nav/sections";
 
+export type AppMode = "code" | "learning";
+
 interface UiState {
   sidebarCollapsed: boolean;
   activeSection: SectionId;
+  appMode: AppMode; // top-level Code-review ↔ Learning shell, global + persisted
   textMode: "easy" | "technical"; // explanatory-text register, global + persisted
   tourOpen: boolean; // ephemeral (not persisted)
   notice: string | null; // ephemeral transient confirmation
   toggleSidebar: () => void;
   setSection: (id: SectionId) => void;
+  setAppMode: (mode: AppMode) => void;
   setTextMode: (mode: "easy" | "technical") => void;
   setTourOpen: (open: boolean) => void;
   setNotice: (msg: string | null) => void;
@@ -24,11 +28,13 @@ export const useUiStore = create<UiState>()(
     (set) => ({
       sidebarCollapsed: false,
       activeSection: DEFAULT_SECTION,
+      appMode: "code",
       textMode: "easy",
       tourOpen: false,
       notice: null,
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSection: (id) => set({ activeSection: id }),
+      setAppMode: (mode) => set({ appMode: mode }),
       setTextMode: (mode) => set({ textMode: mode }),
       setTourOpen: (open) => set({ tourOpen: open }),
       setNotice: (msg) => set({ notice: msg }),
@@ -40,6 +46,7 @@ export const useUiStore = create<UiState>()(
       partialize: (s) => ({
         sidebarCollapsed: s.sidebarCollapsed,
         activeSection: s.activeSection,
+        appMode: s.appMode,
         textMode: s.textMode,
       }),
     },

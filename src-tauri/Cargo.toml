@@ -28,4 +28,5 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 keyring = { version = "3.6", features = ["apple-native"] }
 # Blocking HTTP for the GitHub REST API + device flow (native-tls = Security framework).
 reqwest = { version = "0.12", features = ["blocking", "json"] }
+rs-fsrs = "1.2.1"
 
