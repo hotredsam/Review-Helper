@@ -7,6 +7,7 @@ import {
   MessageSquareQuote,
   MessagesSquare,
   Inbox,
+  Palette,
   GraduationCap,
   Settings,
   type LucideIcon,
@@ -23,6 +24,7 @@ export type SectionId =
   | "grill"
   | "chat"
   | "inbox"
+  | "palette"
   | "learn"
   | "settings";
 
@@ -99,6 +101,14 @@ export const SECTIONS: Section[] = [
     icon: ListChecks,
     emptyTitle: "No plan yet",
     emptyBody: "Your phased build plan and its tasks will live here once the project is set up.",
+  },
+  {
+    id: "palette",
+    label: "Palette",
+    icon: Palette,
+    emptyTitle: "Color palette planner",
+    emptyBody:
+      "Design a frontend color theme and see it rendered as a generative app icon and a UI mock.",
   },
   {
     id: "learn",

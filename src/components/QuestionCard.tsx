@@ -50,7 +50,7 @@ export function QuestionCard({ projectId, question }: { projectId: number; quest
           <button
             type="button"
             onClick={() => setBody(question.recommended_answer ?? "")}
-            className="text-xs text-accent hover:underline"
+            className="ml-1 rounded-md border border-border bg-surface-2 px-2 py-0.5 text-xs font-medium text-fg-muted hover:bg-surface hover:text-fg"
           >
             Use this
           </button>

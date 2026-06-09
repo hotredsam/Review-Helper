@@ -88,6 +88,38 @@ export function Gauge({ value, label, size = 132 }: { value: number; label: stri
   );
 }
 
+/** Full-circle score ring for a single 0–100 score, tinted by value. Used for
+ *  the overall score so it reads as a complete circle (not a clipped half). */
+export function ScoreRing({ value, label, size = 120 }: { value: number; label: string; size?: number }) {
+  const v = Math.round(clamp(value));
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = Math.max(1, size / 2 - 10);
+  const circ = 2 * Math.PI * r;
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${label}: ${v} of 100`} className={tintText(v)}>
+      <circle cx={cx} cy={cy} r={r} className="fill-none stroke-surface-2" strokeWidth={9} />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={9}
+        strokeLinecap="round"
+        strokeDasharray={`${(v / 100) * circ} ${circ}`}
+        transform={`rotate(-90 ${cx} ${cy})`}
+      />
+      <text x={cx} y={cy - 3} className="fill-fg" fontSize={22} fontWeight={700} textAnchor="middle" dominantBaseline="middle">
+        {v}
+      </text>
+      <text x={cx} y={cy + 16} className="fill-fg-subtle" fontSize={9} textAnchor="middle" dominantBaseline="middle">
+        {label}
+      </text>
+    </svg>
+  );
+}
+
 /** Labeled horizontal progress bar. */
 export function ProgressBar({ value, max = 100, label }: { value: number; max?: number; label: string }) {
   const pct = max > 0 && Number.isFinite(value) ? Math.round(clamp((value / max) * 100)) : 0;

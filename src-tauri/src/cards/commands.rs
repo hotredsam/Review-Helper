@@ -44,9 +44,9 @@ pub fn card_explain(db: State<'_, Db>, gate: State<'_, CardGate>, term: String) 
     if term.is_empty() {
         return Err("Enter a term to explain.".into());
     }
-    if term.chars().count() > MAX_TERM_CHARS {
-        return Err(format!("Term is too long (max {MAX_TERM_CHARS} characters)."));
-    }
+    // Truncate an over-long term (e.g. a full composite stack choice) rather than
+    // rejecting it, so "Why?" never dead-ends on a long choice.
+    let term: String = term.chars().take(MAX_TERM_CHARS).collect();
 
     // Fast path: reuse a card that already has content.
     {

@@ -9,7 +9,7 @@ export function CoverageMeter({ cov }: { cov: Coverage }) {
   return (
     <div className="rounded-lg border border-border bg-surface p-4">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+        <h3 className="flex items-center text-xs font-semibold uppercase tracking-wide text-fg-subtle">
           Detail coverage
           <InfoDot
             term="detail coverage"

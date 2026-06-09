@@ -4,7 +4,15 @@
  * the shared persistence key. Add a theme by adding a row here AND a matching
  * [data-theme="id"] block in themes.css.
  */
-export type ThemeId = "light" | "dark" | "midnight" | "sand";
+export type ThemeId =
+  | "light"
+  | "dark"
+  | "midnight"
+  | "sand"
+  | "nord"
+  | "forest"
+  | "rose"
+  | "grape";
 
 export interface ThemeMeta {
   id: ThemeId;
@@ -16,6 +24,10 @@ export const THEMES: ThemeMeta[] = [
   { id: "dark", label: "Dark" },
   { id: "midnight", label: "Midnight" },
   { id: "sand", label: "Sand" },
+  { id: "nord", label: "Nord" },
+  { id: "forest", label: "Forest" },
+  { id: "rose", label: "Rose" },
+  { id: "grape", label: "Grape" },
 ];
 
 export const DEFAULT_THEME: ThemeId = "light";

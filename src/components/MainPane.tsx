@@ -10,6 +10,7 @@ import { ChatPane } from "./ChatPane";
 import { DecisionsPane } from "./DecisionsPane";
 import { StackPane } from "./StackPane";
 import { InboxPane } from "./InboxPane";
+import { PalettePane } from "./PalettePane";
 import { ComingSoon } from "./ComingSoon";
 import { sectionById } from "../nav/sections";
 import { useUiStore } from "../store/uiStore";
@@ -29,9 +30,9 @@ export function MainPane({ onNewProject }: Props) {
   const active = projects.find((p) => p.id === activeId) ?? null;
   const section = sectionById(activeSectionId);
 
-  // No project: only Settings + the coming-soon Learn stub are reachable;
-  // everything else invites creating one.
-  if (!active && section.id !== "settings" && section.id !== "learn") {
+  // No project: only Settings, the Palette planner, and the coming-soon Learn
+  // stub are reachable; everything else invites creating one.
+  if (!active && section.id !== "settings" && section.id !== "learn" && section.id !== "palette") {
     return (
       <div className="flex h-full flex-col">
         <EmptyState
@@ -65,6 +66,8 @@ export function MainPane({ onNewProject }: Props) {
       <div className="flex-1 overflow-auto">
         {section.id === "learn" ? (
           <ComingSoon />
+        ) : section.id === "palette" ? (
+          <PalettePane />
         ) : section.id === "settings" ? (
           <SettingsView />
         ) : section.id === "overview" && active ? (

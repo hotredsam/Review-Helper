@@ -2,6 +2,16 @@ import { useState } from "react";
 import { Loader2, HelpCircle } from "lucide-react";
 import { cardExplain, type Card } from "../api/cards";
 
+/** Keep short choices verbatim; for a long composite choice (e.g. a full pipes
+ *  stack string) explain just the leading technology so the term stays under the
+ *  card length cap and "Why?" never errors. */
+function conciseTerm(s: string): string {
+  const t = s.trim();
+  if (t.length <= 80) return t;
+  const head = t.split(/[(/;,\n]| [-–—] /)[0].trim();
+  return (head.length >= 3 ? head : t).slice(0, 120).trim();
+}
+
 /**
  * A "Why?" affordance for a decision or stack choice: surfaces an explanation
  * (generating + caching a learning card for the term) inline. The card is then
@@ -23,7 +33,7 @@ export function WhyExplain({ term }: { term: string }) {
       setBusy(true);
       setError(null);
       try {
-        setCard(await cardExplain(term));
+        setCard(await cardExplain(conciseTerm(term)));
       } catch (e) {
         setError(String(e));
       } finally {

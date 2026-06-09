@@ -120,3 +120,119 @@
   --ring: #c2410c;
   --scrim: rgb(40 30 18 / 0.40);
 }
+
+/* Nord — cool, low-contrast blue-grays (the "polar night" + "frost"). */
+[data-theme="nord"] {
+  --bg: #2e3440;
+  --surface: #3b4252;
+  --surface-2: #434c5e;
+  --overlay: #3b4252;
+
+  --fg: #eceff4;
+  --fg-muted: #cdd5e3;
+  --fg-subtle: #aab4c8; /* WCAG AA: 4.8:1 on surface, 6.0:1 on bg */
+
+  --border: #434c5e;
+  --border-strong: #4c566a;
+
+  --accent: #88c0d0;
+  --accent-fg: #2e3440;
+  --accent-hover: #8fbcbb;
+
+  --success: #a3be8c;
+  --success-fg: #2e3440;
+  --warning: #ebcb8b;
+  --warning-fg: #2e3440;
+  --danger: #bf616a;
+  --danger-fg: #eceff4;
+
+  --ring: #88c0d0;
+  --scrim: rgb(20 24 30 / 0.55);
+}
+
+/* Forest — deep green, warm-leaning dark. */
+[data-theme="forest"] {
+  --bg: #0e1a14;
+  --surface: #16271e;
+  --surface-2: #1f3529;
+  --overlay: #16271e;
+
+  --fg: #e7f3ec;
+  --fg-muted: #aac6b6;
+  --fg-subtle: #87a896; /* WCAG AA: 6.0:1 on surface, 6.9:1 on bg */
+
+  --border: #1f3529;
+  --border-strong: #2c4838;
+
+  --accent: #34d399;
+  --accent-fg: #05231a;
+  --accent-hover: #6ee7b7;
+
+  --success: #4ade80;
+  --success-fg: #05231a;
+  --warning: #fbbf24;
+  --warning-fg: #241a02;
+  --danger: #fb7185;
+  --danger-fg: #2a0511;
+
+  --ring: #34d399;
+  --scrim: rgb(4 14 9 / 0.60);
+}
+
+/* Rose — warm, light, blush-tinted. */
+[data-theme="rose"] {
+  --bg: #fdf6f7;
+  --surface: #ffffff;
+  --surface-2: #f7e7eb;
+  --overlay: #ffffff;
+
+  --fg: #2a1d22;
+  --fg-muted: #6e5560;
+  --fg-subtle: #80646e; /* WCAG AA: 5.3:1 on surface, 5.0:1 on bg */
+
+  --border: #f3dbe1;
+  --border-strong: #e6c2cb;
+
+  --accent: #e11d48;
+  --accent-fg: #fff1f3;
+  --accent-hover: #be123c;
+
+  --success: #15803d;
+  --success-fg: #f0fdf4;
+  --warning: #b45309;
+  --warning-fg: #fffbeb;
+  --danger: #be123c;
+  --danger-fg: #fff1f3;
+
+  --ring: #e11d48;
+  --scrim: rgb(40 20 28 / 0.40);
+}
+
+/* Grape — moody violet dark. */
+[data-theme="grape"] {
+  --bg: #1a1325;
+  --surface: #241a33;
+  --surface-2: #2f2342;
+  --overlay: #241a33;
+
+  --fg: #ece6f7;
+  --fg-muted: #bcabd6;
+  --fg-subtle: #9a86bd; /* WCAG AA: 5.1:1 on surface, 5.6:1 on bg */
+
+  --border: #2f2342;
+  --border-strong: #3d2e54;
+
+  --accent: #a855f7;
+  --accent-fg: #faf5ff;
+  --accent-hover: #c084fc;
+
+  --success: #34d399;
+  --success-fg: #05231a;
+  --warning: #fbbf24;
+  --warning-fg: #241a02;
+  --danger: #fb7185;
+  --danger-fg: #2a0511;
+
+  --ring: #a855f7;
+  --scrim: rgb(10 6 18 / 0.60);
+}

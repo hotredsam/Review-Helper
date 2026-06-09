@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { Loader2, Gauge, AlertTriangle } from "lucide-react";
 import { useAssessStore, ensureAssessListener } from "../store/assessStore";
-import { RadarChart, Gauge as ScoreGauge } from "./charts";
+import { RadarChart, ScoreRing } from "./charts";
 import { InfoDot } from "./InfoDot";
 import type { DimScore } from "../api/assessment";
 import type { Project } from "../api/projects";
@@ -98,8 +98,8 @@ export function StatePane({ project }: { project: Project }) {
     <div className="mx-auto max-w-3xl space-y-6 p-8">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-32 shrink-0">
-            <ScoreGauge value={assessment.overall} label="Overall" />
+          <div className="w-28 shrink-0">
+            <ScoreRing value={assessment.overall} label="Overall" />
           </div>
           <RadarChart
             axes={DIMENSIONS.map(([key, label]) => ({
@@ -124,7 +124,7 @@ export function StatePane({ project }: { project: Project }) {
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+        <h2 className="flex items-center text-xs font-semibold uppercase tracking-wide text-fg-subtle">
           Vibecoding dimensions
           <InfoDot
             term="vibecoding dimensions"
@@ -137,7 +137,7 @@ export function StatePane({ project }: { project: Project }) {
       </section>
 
       <section className="space-y-2">
-        <div className="flex items-baseline justify-between">
+        <div className="flex items-center justify-between">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Production readiness</h2>
           <span className={"text-sm font-semibold " + tint(assessment.production?.overall ?? 0).text}>
             {assessment.production?.overall ?? 0}
