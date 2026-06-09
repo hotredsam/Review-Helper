@@ -6,6 +6,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 pub mod commands;
+pub mod study;
 mod detect;
 pub use detect::detect_tech_in_clone;
 

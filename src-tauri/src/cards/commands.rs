@@ -38,8 +38,15 @@ pub fn card_get(db: State<'_, Db>, term: String) -> Result<Option<Card>, String>
 }
 
 /// Return a card for `term`, generating + caching it if it has no content yet.
+/// When `project_id` is given (the Understand hub on a project), the card is
+/// associated with that project for the "This project" filter.
 #[tauri::command]
-pub fn card_explain(db: State<'_, Db>, gate: State<'_, CardGate>, term: String) -> Result<Card, String> {
+pub fn card_explain(
+    db: State<'_, Db>,
+    gate: State<'_, CardGate>,
+    term: String,
+    project_id: Option<i64>,
+) -> Result<Card, String> {
     let term = term.trim().to_string();
     if term.is_empty() {
         return Err("Enter a term to explain.".into());
@@ -47,6 +54,12 @@ pub fn card_explain(db: State<'_, Db>, gate: State<'_, CardGate>, term: String) 
     // Truncate an over-long term (e.g. a full composite stack choice) rather than
     // rejecting it, so "Why?" never dead-ends on a long choice.
     let term: String = term.chars().take(MAX_TERM_CHARS).collect();
+
+    if let Some(pid) = project_id {
+        if let Ok(conn) = db.0.lock() {
+            let _ = super::study::record_project_card(&conn, pid, &term); // best-effort
+        }
+    }
 
     // Fast path: reuse a card that already has content.
     {
@@ -105,6 +118,7 @@ pub fn card_capture(
     term: String,
     explanation: String,
     domain: Option<String>,
+    project_id: Option<i64>,
 ) -> Result<Card, String> {
     let term = term.trim().to_string();
     if term.is_empty() {
@@ -117,5 +131,85 @@ pub fn card_capture(
         return Err("Explanation is too long (max 10000 characters).".into());
     }
     let conn = db.0.lock().map_err(|e| e.to_string())?;
+    if let Some(pid) = project_id {
+        let _ = super::study::record_project_card(&conn, pid, &term);
+    }
     super::capture(&conn, &term, &explanation, domain.as_deref().unwrap_or("other"))
+}
+
+/// Terms of cards that belong to this project (for the "This project" filter).
+#[tauri::command]
+pub fn card_project_terms(db: State<'_, Db>, project_id: i64) -> Result<Vec<String>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    super::study::project_terms(&conn, project_id)
+}
+
+/// Fix the spelling/grammar of a typed term before it's explained + carded.
+#[tauri::command]
+pub fn card_clean_term(term: String) -> Result<String, String> {
+    let t = term.trim();
+    if t.is_empty() {
+        return Err("Enter a term first.".into());
+    }
+    super::study::clean_term(t)
+}
+
+/// 5–10 starter questions for a card; cached after the first generation.
+#[tauri::command]
+pub fn card_premade_questions(db: State<'_, Db>, term: String) -> Result<Vec<String>, String> {
+    let term = term.trim().to_string();
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let cached = super::study::cached_questions(&conn, &term)?;
+        if !cached.is_empty() {
+            return Ok(cached);
+        }
+    }
+    let qs = super::study::generate_questions(&term)?; // model call, no lock held
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    super::study::save_questions(&conn, &term, &qs)?;
+    Ok(qs)
+}
+
+/// Read a card's inline chat history (per project + term).
+#[tauri::command]
+pub fn card_chat_history(
+    db: State<'_, Db>,
+    project_id: i64,
+    term: String,
+) -> Result<Vec<super::study::CardMsg>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    super::study::chat_history(&conn, project_id, &term)
+}
+
+/// Send a message in a card's inline chat; persists both sides, returns the reply.
+#[tauri::command]
+pub fn card_chat_send(
+    db: State<'_, Db>,
+    project_id: i64,
+    term: String,
+    message: String,
+) -> Result<String, String> {
+    let message = message.trim().to_string();
+    if message.is_empty() {
+        return Err("Type a question first.".into());
+    }
+    if message.chars().count() > 4_000 {
+        return Err("Message is too long.".into());
+    }
+    // Gather the card content + history, persist the user message, then call out.
+    let (what, why, history) = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let card = get_card(&conn, &term)?;
+        let (what, why) = card
+            .map(|c| (c.what_md.unwrap_or_default(), c.why_md.unwrap_or_default()))
+            .unwrap_or_default();
+        let history = super::study::chat_history(&conn, project_id, &term)?;
+        super::study::chat_add(&conn, project_id, &term, "user", &message)?;
+        (what, why, history)
+    };
+    let reply = super::study::chat_reply(&term, &what, &why, &history, &message)?;
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    super::study::chat_add(&conn, project_id, &term, "assistant", &reply)?;
+    Ok(reply)
 }

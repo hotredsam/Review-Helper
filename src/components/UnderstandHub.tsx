@@ -1,18 +1,16 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Search, Loader2, BookOpen } from "lucide-react";
-import { cardsList, cardExplain, type Card } from "../api/cards";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Search, Loader2, BookOpen, FolderGit2 } from "lucide-react";
+import {
+  cardsList,
+  cardExplain,
+  cardCleanTerm,
+  cardProjectTerms,
+  type Card,
+} from "../api/cards";
+import { CardChat } from "./CardChat";
+import type { Project } from "../api/projects";
 
-const DOMAIN_ORDER = [
-  "architecture",
-  "frontend",
-  "backend",
-  "pipes",
-  "deployment",
-  "business",
-  "design",
-  "ux",
-  "other",
-];
+const DOMAIN_ORDER = ["architecture", "frontend", "backend", "pipes", "deployment", "business", "design", "ux", "other"];
 const DOMAIN_LABEL: Record<string, string> = {
   architecture: "Architecture",
   frontend: "Frontend",
@@ -26,32 +24,41 @@ const DOMAIN_LABEL: Record<string, string> = {
 };
 
 /**
- * The Understand hub: browse the learning cards by domain, and "explain
- * anything" — type a term and the model generates + caches a card. Never
- * dead-ends: an unknown term always offers generation.
+ * The Understand hub: a compact, filterable card library. Type to filter live;
+ * "Explain" generates a card for a term (spelling/grammar cleaned first). Filter
+ * to a domain or to just this project's cards. Open a card to read it and chat
+ * about the concept inline. Never dead-ends.
  */
-export function UnderstandHub() {
+export function UnderstandHub({ project }: { project: Project }) {
   const [cards, setCards] = useState<Card[]>([]);
+  const [projectTerms, setProjectTerms] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "project" | string>("all");
   const [selected, setSelected] = useState<Card | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const refresh = async () => {
+    const [cs, terms] = await Promise.all([cardsList(), cardProjectTerms(project.id)]);
+    setCards(cs);
+    setProjectTerms(new Set(terms.map((t) => t.toLowerCase())));
+  };
   useEffect(() => {
-    void cardsList()
-      .then(setCards)
-      .catch((e) => setError(String(e)));
-  }, []);
+    void refresh().catch((e) => setError(String(e)));
+  }, [project.id]);
 
-  const explain = async (term: string) => {
-    const t = term.trim();
+  // Generate a card for a typed term (spelling/grammar cleaned first).
+  const explain = async (raw: string, clean: boolean) => {
+    const t = raw.trim();
     if (!t || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const card = await cardExplain(t);
+      const term = clean ? await cardCleanTerm(t).catch(() => t) : t;
+      const card = await cardExplain(term, project.id);
       setSelected(card);
-      setCards(await cardsList());
+      setQuery("");
+      await refresh();
     } catch (e) {
       setError(String(e));
     } finally {
@@ -60,25 +67,35 @@ export function UnderstandHub() {
   };
 
   const openCard = async (card: Card) => {
-    if (card.what_md) {
-      setSelected(card);
-    } else {
-      await explain(card.term); // detected stub → generate on demand
-    }
+    if (card.what_md) setSelected(card);
+    else await explain(card.term, false); // detected stub → generate on demand
   };
 
-  const grouped = DOMAIN_ORDER.map((d) => ({
-    domain: d,
-    cards: cards.filter((c) => (c.domain ?? "other") === d),
-  })).filter((g) => g.cards.length > 0);
+  const filtered = useMemo(() => {
+    let cs = cards;
+    if (filter === "project") cs = cs.filter((c) => projectTerms.has(c.term.toLowerCase()));
+    else if (filter !== "all") cs = cs.filter((c) => (c.domain ?? "other") === filter);
+    const q = query.trim().toLowerCase();
+    if (q) cs = cs.filter((c) => c.term.toLowerCase().includes(q));
+    return cs;
+  }, [cards, filter, projectTerms, query]);
+
+  const grouped = DOMAIN_ORDER.map((d) => ({ domain: d, cards: filtered.filter((c) => (c.domain ?? "other") === d) })).filter(
+    (g) => g.cards.length > 0,
+  );
+
+  const FILTERS: { id: "all" | "project" | string; label: string; icon?: boolean }[] = [
+    { id: "all", label: "All" },
+    { id: "project", label: "This project", icon: true },
+    ...DOMAIN_ORDER.filter((d) => cards.some((c) => (c.domain ?? "other") === d)).map((d) => ({ id: d, label: DOMAIN_LABEL[d] })),
+  ];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-8">
+    <div className="mx-auto max-w-4xl space-y-4 p-8">
       <form
         onSubmit={(e: FormEvent) => {
           e.preventDefault();
-          void explain(query);
-          setQuery("");
+          void explain(query, true);
         }}
         className="flex gap-2"
       >
@@ -88,7 +105,8 @@ export function UnderstandHub() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             maxLength={200}
-            placeholder="Explain anything — a term, concept, or technology…"
+            placeholder="Filter cards, or explain anything — a term, concept, or technology…"
+            aria-label="Filter or explain a term"
             className="w-full rounded-lg border border-border bg-surface py-2 pl-9 pr-3 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/40"
           />
         </div>
@@ -102,6 +120,27 @@ export function UnderstandHub() {
         </button>
       </form>
 
+      {/* Filters */}
+      <div className="flex flex-wrap gap-1.5">
+        {FILTERS.map((f) => {
+          const active = filter === f.id;
+          return (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFilter(f.id)}
+              className={
+                "flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors " +
+                (active ? "bg-accent text-accent-fg" : "border border-border text-fg-muted hover:bg-surface-2 hover:text-fg")
+              }
+            >
+              {f.icon && <FolderGit2 className="h-3 w-3" />}
+              {f.label}
+            </button>
+          );
+        })}
+      </div>
+
       {error && (
         <p className="text-sm text-danger" role="alert">
           {error}
@@ -109,7 +148,7 @@ export function UnderstandHub() {
       )}
 
       <div aria-live="polite" aria-atomic="true">
-        {selected && <CardDetail card={selected} />}
+        {selected && <CardDetail card={selected} project={project.id} />}
       </div>
 
       <div className="space-y-4">
@@ -133,36 +172,37 @@ export function UnderstandHub() {
                   }
                 >
                   {c.term}
-                  {!c.what_md && (
-                    <span aria-hidden="true" className="ml-1 text-xs text-fg-subtle">
-                      ·
-                    </span>
-                  )}
                 </button>
               ))}
             </div>
           </section>
         ))}
         {cards.length === 0 && !error && <p className="text-sm text-fg-subtle">Loading cards…</p>}
+        {cards.length > 0 && filtered.length === 0 && (
+          <p className="text-sm text-fg-subtle">
+            No cards match. {filter === "project" ? "Explain a term to add it to this project." : "Try a different filter."}
+          </p>
+        )}
       </div>
     </div>
   );
 }
 
-function CardDetail({ card }: { card: Card }) {
+function CardDetail({ card, project }: { card: Card; project: number }) {
   return (
     <div className="rounded-xl border border-border bg-surface p-5">
       <div className="mb-3 flex items-center gap-2">
         <h2 className="text-lg font-semibold text-fg">{card.term}</h2>
         {card.domain && (
           <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-fg-muted">
-            {card.domain}
+            {DOMAIN_LABEL[card.domain] ?? card.domain}
           </span>
         )}
       </div>
       <CardSection label="What it is" body={card.what_md} />
       <CardSection label="When to use it" body={card.when_md} />
       <CardSection label="Why it matters" body={card.why_md} />
+      <CardChat project={project} term={card.term} />
     </div>
   );
 }

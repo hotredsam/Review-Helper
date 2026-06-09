@@ -16,11 +16,19 @@ vi.mock("../api/cards", () => ({
     why_md: "Matters because Z.",
     source: "generated",
   })),
+  cardCapture: vi.fn(async () => ({})),
+  cardProjectTerms: vi.fn(async () => []),
+  cardCleanTerm: vi.fn(async (t: string) => t),
+  cardPremadeQuestions: vi.fn(async () => []),
+  cardChatHistory: vi.fn(async () => []),
+  cardChatSend: vi.fn(async () => "reply"),
 }));
 
 import { cardsList, cardExplain } from "../api/cards";
 import { UnderstandHub } from "../components/UnderstandHub";
 import { WhyExplain } from "../components/WhyExplain";
+
+const proj: any = { id: 1, name: "P", kind: "imported", clone_path: "/c", github_repo_url: "u", default_branch: "main", app_type: null, created_at: "", updated_at: "" };
 
 beforeEach(() => {
   ctrl.cards = [
@@ -32,14 +40,14 @@ afterEach(() => vi.clearAllMocks());
 describe("UnderstandHub", () => {
   it("browses seeded cards and opens one", async () => {
     const user = userEvent.setup();
-    render(<UnderstandHub />);
+    render(<UnderstandHub project={proj} />);
     await user.click(await screen.findByRole("button", { name: "MVP" }));
     expect(await screen.findByText("min viable")).toBeTruthy();
   });
 
   it("explains a cold term and shows the new card", async () => {
     const user = userEvent.setup();
-    render(<UnderstandHub />);
+    render(<UnderstandHub project={proj} />);
     await screen.findByRole("button", { name: "MVP" });
     await user.type(screen.getByPlaceholderText(/Explain anything/i), "Bloom filter");
     await user.click(screen.getByRole("button", { name: /Explain/i }));
@@ -48,13 +56,13 @@ describe("UnderstandHub", () => {
 
   it("surfaces an error (offline) when listing cards fails", async () => {
     vi.mocked(cardsList).mockRejectedValueOnce(new Error("Claude not available"));
-    render(<UnderstandHub />);
+    render(<UnderstandHub project={proj} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Claude not available");
   });
 
   it("surfaces an error when generation fails — never silently dead-ends", async () => {
     const user = userEvent.setup();
-    render(<UnderstandHub />);
+    render(<UnderstandHub project={proj} />);
     await screen.findByRole("button", { name: "MVP" });
     vi.mocked(cardExplain).mockRejectedValueOnce(new Error("Model unavailable"));
     await user.type(screen.getByPlaceholderText(/Explain anything/i), "Bloom filter");
@@ -64,7 +72,7 @@ describe("UnderstandHub", () => {
 
   it("renders only the populated sections of a partial card", async () => {
     const user = userEvent.setup();
-    render(<UnderstandHub />);
+    render(<UnderstandHub project={proj} />);
     await screen.findByRole("button", { name: "MVP" });
     vi.mocked(cardExplain).mockResolvedValueOnce({
       id: 5,

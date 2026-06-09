@@ -121,3 +121,28 @@ CREATE TABLE chat_messages (
 );
 CREATE INDEX idx_chat_transcripts_project ON chat_transcripts(project_id, updated_at);
 CREATE INDEX idx_chat_messages_transcript ON chat_messages(transcript_id, id);
+
+-- Understand-hub additions (v5): which cards belong to a project, cached premade
+-- questions per card, and an inline per-card chat.
+CREATE TABLE project_cards (
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  term TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (project_id, term)
+);
+CREATE TABLE card_questions (
+  id INTEGER PRIMARY KEY,
+  term TEXT NOT NULL,
+  question TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE card_chat_messages (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  term TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user','assistant')),
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_card_questions_term ON card_questions(term);
+CREATE INDEX idx_card_chat ON card_chat_messages(project_id, term, id);

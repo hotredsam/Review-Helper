@@ -71,7 +71,7 @@ fn mentions(haystack: &str, word: &str) -> bool {
 /// Scan a clone's manifests for known tech and add detected-tech cards (content
 /// generated on demand). Returns the number added. Refuses to follow symlinks
 /// out of the clone (treats the clone as untrusted).
-pub fn detect_tech_in_clone(conn: &Connection, clone_path: &str) -> Result<usize, String> {
+pub fn detect_tech_in_clone(conn: &Connection, clone_path: &str, project_id: Option<i64>) -> Result<usize, String> {
     let root = std::path::Path::new(clone_path);
     let canon_root = match std::fs::canonicalize(root) {
         Ok(r) => r,
@@ -99,14 +99,21 @@ pub fn detect_tech_in_clone(conn: &Connection, clone_path: &str) -> Result<usize
     }
     let mut added = 0;
     for (key, term, domain) in KNOWN_TECH {
-        if mentions(&haystack, key) && super::get(conn, term)?.is_none() {
-            conn.execute(
-                "INSERT INTO learning_cards (term, domain, source) VALUES (?1, ?2, 'detected') \
-                 ON CONFLICT(term) DO NOTHING",
-                params![term, domain],
-            )
-            .map_err(|e| e.to_string())?;
-            added += 1;
+        if mentions(&haystack, key) {
+            if super::get(conn, term)?.is_none() {
+                conn.execute(
+                    "INSERT INTO learning_cards (term, domain, source) VALUES (?1, ?2, 'detected') \
+                     ON CONFLICT(term) DO NOTHING",
+                    params![term, domain],
+                )
+                .map_err(|e| e.to_string())?;
+                added += 1;
+            }
+            // Associate every mentioned tech with the project (for the "This
+            // project" filter), whether or not its card already existed.
+            if let Some(pid) = project_id {
+                let _ = super::study::record_project_card(conn, pid, term);
+            }
         }
     }
     Ok(added)
@@ -136,7 +143,7 @@ mod tests {
         )
         .unwrap();
 
-        let added = detect_tech_in_clone(&conn, dir.to_str().unwrap()).unwrap();
+        let added = detect_tech_in_clone(&conn, dir.to_str().unwrap(), None).unwrap();
         assert!(added >= 2);
         assert!(get(&conn, "React").unwrap().is_some());
         assert!(get(&conn, "Express").unwrap().is_some());
@@ -166,7 +173,7 @@ mod tests {
         // package.json inside the clone is a symlink pointing outside it.
         std::os::unix::fs::symlink(&outside, clone.join("package.json")).unwrap();
 
-        let added = detect_tech_in_clone(&conn, clone.to_str().unwrap()).unwrap();
+        let added = detect_tech_in_clone(&conn, clone.to_str().unwrap(), None).unwrap();
         assert_eq!(added, 0, "a symlinked manifest escaping the clone must not be read");
         assert!(get(&conn, "React").unwrap().is_none());
 

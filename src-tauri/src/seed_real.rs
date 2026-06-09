@@ -104,7 +104,7 @@ fn seed_recent_repos() {
         crate::projects::set_clone_path(&conn, pid, &dest_str).unwrap();
 
         // Detected-tech cards.
-        let added = crate::cards::detect_tech_in_clone(&conn, &dest_str).unwrap_or(0);
+        let added = crate::cards::detect_tech_in_clone(&conn, &dest_str, Some(pid)).unwrap_or(0);
         eprintln!("  detected-tech cards added: {added}");
 
         // Analysis -> plan.

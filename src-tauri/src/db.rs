@@ -64,7 +64,41 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
         migrate_v4(conn)?;
         conn.pragma_update(None, "user_version", 4)?;
     }
+    if version < 5 {
+        migrate_v5(conn)?;
+        conn.pragma_update(None, "user_version", 5)?;
+    }
     Ok(())
+}
+
+/// v5: Understand-hub additions — per-project card membership, cached premade
+/// questions per card, and per-card inline chat. Pure `CREATE … IF NOT EXISTS`
+/// (no inbound FKs from old tables) — idempotent; a no-op on fresh DBs.
+fn migrate_v5(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS project_cards (
+           project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+           term TEXT NOT NULL,
+           created_at TEXT NOT NULL DEFAULT (datetime('now')),
+           PRIMARY KEY (project_id, term)
+         );
+         CREATE TABLE IF NOT EXISTS card_questions (
+           id INTEGER PRIMARY KEY,
+           term TEXT NOT NULL,
+           question TEXT NOT NULL,
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS card_chat_messages (
+           id INTEGER PRIMARY KEY,
+           project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+           term TEXT NOT NULL,
+           role TEXT NOT NULL CHECK (role IN ('user','assistant')),
+           content TEXT NOT NULL,
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE INDEX IF NOT EXISTS idx_card_questions_term ON card_questions(term);
+         CREATE INDEX IF NOT EXISTS idx_card_chat ON card_chat_messages(project_id, term, id);",
+    )
 }
 
 /// v4: add `questions.ui_spec` (model-emitted input UI per grill question).
@@ -153,8 +187,8 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        // schema.sql defines 15 tables (13 + chat_transcripts + chat_messages).
-        assert_eq!(count, 15);
+        // schema.sql defines 18 tables (15 + project_cards + card_questions + card_chat_messages).
+        assert_eq!(count, 18);
     }
 
     #[test]
@@ -174,7 +208,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
     }
 
     #[test]

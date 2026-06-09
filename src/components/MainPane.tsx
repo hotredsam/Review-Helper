@@ -77,7 +77,7 @@ export function MainPane({ onNewProject }: Props) {
         ) : section.id === "overview" && active ? (
           <StatePane project={active} />
         ) : section.id === "understand" && active ? (
-          <UnderstandHub />
+          <UnderstandHub project={active} />
         ) : section.id === "grill" && active ? (
           <GrillPane project={active} />
         ) : section.id === "chat" && active ? (
