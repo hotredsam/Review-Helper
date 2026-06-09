@@ -1,5 +1,7 @@
 import { useState, type ChangeEvent } from "react";
+import { Loader2 } from "lucide-react";
 import { Modal } from "../Modal";
+import { learningExtractPdf } from "../../api/learning";
 import { useLearningStore } from "../../store/learningStore";
 
 type Kind = "describe" | "upload";
@@ -16,6 +18,7 @@ export function NewSubjectDialog({ open, onClose }: { open: boolean; onClose: ()
   const [uploadText, setUploadText] = useState("");
   const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [extracting, setExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reset = () => {
@@ -24,6 +27,7 @@ export function NewSubjectDialog({ open, onClose }: { open: boolean; onClose: ()
     setGoal("");
     setUploadText("");
     setFileName("");
+    setExtracting(false);
     setError(null);
   };
   const close = () => {
@@ -35,17 +39,33 @@ export function NewSubjectDialog({ open, onClose }: { open: boolean; onClose: ()
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
-    if (file.size > 5_000_000) {
-      setError("That file is large (over 5 MB). Upload a smaller text/markdown file, or describe the subject instead.");
+    setUploadText("");
+    const isPdf = file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf";
+    const limit = isPdf ? 25_000_000 : 5_000_000;
+    if (file.size > limit) {
+      setError(`That file is large (over ${isPdf ? "25" : "5"} MB). Upload a smaller file, or describe the subject instead.`);
       return;
     }
-    try {
-      const text = await file.text();
-      setUploadText(text);
+    const setNameDefault = () => {
       setFileName(file.name);
       if (!title.trim()) setTitle(file.name.replace(/\.[^.]+$/, ""));
-    } catch {
-      setError("Couldn't read that file. Try a plain-text or markdown file, or describe the subject instead.");
+    };
+    try {
+      if (isPdf) {
+        setExtracting(true);
+        const buf = await file.arrayBuffer();
+        const text = await learningExtractPdf(Array.from(new Uint8Array(buf)));
+        setUploadText(text);
+        setNameDefault();
+      } else {
+        const text = await file.text();
+        setUploadText(text);
+        setNameDefault();
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setExtracting(false);
     }
   };
 
@@ -128,17 +148,23 @@ export function NewSubjectDialog({ open, onClose }: { open: boolean; onClose: ()
           <div className="space-y-2">
             <input
               type="file"
-              accept=".txt,.md,.markdown,text/plain,text/markdown"
+              accept=".txt,.md,.markdown,.pdf,text/plain,text/markdown,application/pdf"
               onChange={onFile}
+              disabled={extracting}
               aria-label="Upload material"
-              className="block w-full text-sm text-fg-muted file:mr-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-fg hover:file:bg-surface-2"
+              className="block w-full text-sm text-fg-muted file:mr-3 file:rounded-md file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-fg hover:file:bg-surface-2 disabled:opacity-60"
             />
-            {fileName && (
+            {extracting && (
+              <p className="flex items-center gap-1.5 text-xs text-fg-subtle">
+                <Loader2 className="h-3 w-3 animate-spin" /> Extracting text from the PDF…
+              </p>
+            )}
+            {!extracting && fileName && uploadText && (
               <p className="text-xs text-fg-subtle">
                 {fileName} — {uploadText.length.toLocaleString()} characters loaded.
               </p>
             )}
-            <p className="text-xs text-fg-subtle">Text or markdown for now. PDF support is coming.</p>
+            <p className="text-xs text-fg-subtle">Plain text, markdown, or PDF. Scanned/image-only PDFs won't extract — paste the text instead.</p>
           </div>
         )}
 
@@ -154,7 +180,7 @@ export function NewSubjectDialog({ open, onClose }: { open: boolean; onClose: ()
           </button>
           <button
             onClick={() => void submit()}
-            disabled={busy}
+            disabled={busy || extracting}
             className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
           >
             {busy ? "Creating…" : "Create"}

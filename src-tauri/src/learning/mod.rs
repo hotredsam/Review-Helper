@@ -9,6 +9,7 @@
 
 pub mod commands;
 mod gen;
+pub mod ingest;
 pub mod intake;
 pub mod mastery;
 pub mod materials;

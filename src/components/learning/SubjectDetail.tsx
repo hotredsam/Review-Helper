@@ -20,6 +20,7 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
   const [detail, setDetail] = useState<SubjectDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [answered, setAnswered] = useState(0);
+  const [totalQs, setTotalQs] = useState(0);
   const [proposing, setProposing] = useState(false);
 
   const load = useCallback(() => {
@@ -105,10 +106,16 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
 
           {detail.stage === "intake" && (
             <>
-              <IntakePane subject={detail} onReadyToPropose={setAnswered} />
+              <IntakePane
+                subject={detail}
+                onReadyToPropose={(a, t) => {
+                  setAnswered(a);
+                  setTotalQs(t);
+                }}
+              />
               <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
                 <span className="text-xs text-fg-subtle">
-                  {answered === 0 ? "Answer a few to tailor the plan." : `${answered} answered`}
+                  {answered === 0 ? "Answer a few to tailor the plan." : `${answered} of ${totalQs} answered`}
                 </span>
                 <button
                   onClick={() => void propose()}

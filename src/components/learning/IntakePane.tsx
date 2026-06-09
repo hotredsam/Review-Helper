@@ -18,7 +18,7 @@ export function IntakePane({
   onReadyToPropose,
 }: {
   subject: SubjectDetail;
-  onReadyToPropose: (answered: number) => void;
+  onReadyToPropose: (answered: number, total: number) => void;
 }) {
   const [items, setItems] = useState<IntakeItem[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,7 +34,7 @@ export function IntakePane({
       .then((qs) => {
         if (!live) return;
         setItems(qs);
-        onReadyToPropose(qs.filter((q) => q.answer?.trim()).length);
+        onReadyToPropose(qs.filter((q) => q.answer?.trim()).length, qs.length);
       })
       .catch((e) => live && setError(String(e)))
       .finally(() => live && setBusy(false));
@@ -50,7 +50,7 @@ export function IntakePane({
       await learningIntakeAnswer(item.id, value);
       setItems((prev) => {
         const next = prev?.map((q) => (q.id === item.id ? { ...q, answer: value } : q)) ?? prev;
-        if (next) onReadyToPropose(next.filter((q) => q.answer?.trim()).length);
+        if (next) onReadyToPropose(next.filter((q) => q.answer?.trim()).length, next.length);
         return next;
       });
     } catch (e) {

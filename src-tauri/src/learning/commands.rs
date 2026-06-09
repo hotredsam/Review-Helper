@@ -365,3 +365,15 @@ pub fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: String) 
     tutor::add(&conn, subject_id, "assistant", &reply)?;
     Ok(reply)
 }
+
+// ---- L6: upload ingest (PDF → text; text/markdown are read in the frontend) ----
+
+/// Extract text from an uploaded PDF's bytes to seed a subject. Bounded + panic-
+/// safe; degrades to a clear "paste the text instead" error on failure.
+#[tauri::command]
+pub fn learning_extract_pdf(bytes: Vec<u8>) -> Result<String, String> {
+    if bytes.len() > 25_000_000 {
+        return Err("That PDF is too large (max 25 MB). Paste the relevant text instead.".into());
+    }
+    super::ingest::extract_pdf(&bytes)
+}

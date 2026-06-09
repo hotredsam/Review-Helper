@@ -109,7 +109,11 @@ export function QuizPane({ moduleId, onAnswered }: { moduleId: number; onAnswere
         <span>
           Question {i + 1} of {qs.length}
         </span>
-        <span>Score {score}</span>
+        {(i > 0 || result) && (
+          <span>
+            Score {score}/{qs.length}
+          </span>
+        )}
       </div>
 
       <p className="text-base font-medium text-fg">{q.question}</p>

@@ -153,6 +153,7 @@ pub fn run() {
             learning::commands::learning_progress,
             learning::commands::learning_tutor_history,
             learning::commands::learning_tutor_send,
+            learning::commands::learning_extract_pdf,
             projects::create_project,
             projects::list_projects,
             projects::get_project,
