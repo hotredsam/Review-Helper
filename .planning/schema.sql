@@ -101,3 +101,22 @@ CREATE INDEX idx_features_project ON features(project_id, status);
 CREATE INDEX idx_answers_question_project ON answers(question_id, project_id);
 CREATE INDEX idx_answers_project_question ON answers(project_id, question_id);
 CREATE INDEX idx_suggestions_project_status ON suggestions(project_id, status);
+
+-- Persisted chat transcripts (v3): past chats survive restarts; the model is
+-- given the full text of all prior chats for cross-chat memory.
+CREATE TABLE chat_transcripts (
+  id INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE chat_messages (
+  id INTEGER PRIMARY KEY,
+  transcript_id INTEGER NOT NULL REFERENCES chat_transcripts(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user','assistant')),
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_chat_transcripts_project ON chat_transcripts(project_id, updated_at);
+CREATE INDEX idx_chat_messages_transcript ON chat_messages(transcript_id, id);

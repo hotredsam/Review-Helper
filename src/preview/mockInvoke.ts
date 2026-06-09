@@ -113,6 +113,23 @@ const handlers: Record<string, (args?: unknown) => unknown> = {
   decisions_list: () => plan.decisions.map((d, i) => ({ id: i + 1, topic: d.topic, choice: d.choice, rationale: d.rationale, alternatives: "", consequences: "", source_ref: "plan", status: "active", created_at: "" })),
   features_list: () => [],
   features_pending_count: () => 0,
+  chat_new: () => 99,
+  chat_transcripts: () => [
+    { id: 1, title: "Does this app have all CRUD features?", updated_at: "2026-06-01 10:00:00", message_count: 4 },
+    { id: 2, title: "How should I handle going offline?", updated_at: "2026-05-30 09:00:00", message_count: 2 },
+  ],
+  chat_messages: (args: any) =>
+    (args?.transcriptId ?? 1) === 2
+      ? [
+          { role: "user", content: "How should I handle going offline?" },
+          { role: "assistant", content: "Queue writes locally and sync them when the connection is back." },
+        ]
+      : [
+          { role: "user", content: "Does this app have all CRUD features?" },
+          { role: "assistant", content: "Yes — create, read, and update are wired; delete is the one gap (notes can't be deleted yet). Want me to add it to the plan?" },
+          { role: "user", content: "Yes, add delete." },
+          { role: "assistant", content: "Added a “Delete notes” task to the Search phase, and noted it as a decision." },
+        ],
 };
 
 function mock(cmd: string, args?: unknown) {

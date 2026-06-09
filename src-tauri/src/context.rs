@@ -17,7 +17,7 @@ const MAX_FIELD: usize = 800;
 /// Neutralize backticks so a value can't break out of its inline-code (`…`)
 /// delimiter — e.g. an answer containing a ```code fence``` would otherwise
 /// close the span and let injected text read as prose/instructions.
-fn fence_safe(s: &str) -> String {
+pub(crate) fn fence_safe(s: &str) -> String {
     s.replace('`', "'")
 }
 

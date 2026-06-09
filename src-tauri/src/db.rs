@@ -56,7 +56,36 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
         migrate_v2(conn)?;
         conn.pragma_update(None, "user_version", 2)?;
     }
+    if version < 3 {
+        migrate_v3(conn)?;
+        conn.pragma_update(None, "user_version", 3)?;
+    }
     Ok(())
+}
+
+/// v3: persisted chat transcripts + messages (past chats survive restarts; the
+/// model gets the full text of all prior chats). No inbound FKs from old tables,
+/// so this is pure `CREATE … IF NOT EXISTS` — fully idempotent. Fresh databases
+/// already carry these from schema.sql, so the migration is a no-op there.
+fn migrate_v3(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS chat_transcripts (
+           id INTEGER PRIMARY KEY,
+           project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+           title TEXT,
+           created_at TEXT NOT NULL DEFAULT (datetime('now')),
+           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS chat_messages (
+           id INTEGER PRIMARY KEY,
+           transcript_id INTEGER NOT NULL REFERENCES chat_transcripts(id) ON DELETE CASCADE,
+           role TEXT NOT NULL CHECK (role IN ('user','assistant')),
+           content TEXT NOT NULL,
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE INDEX IF NOT EXISTS idx_chat_transcripts_project ON chat_transcripts(project_id, updated_at);
+         CREATE INDEX IF NOT EXISTS idx_chat_messages_transcript ON chat_messages(transcript_id, id);",
+    )
 }
 
 /// v2: make `learning_cards.term` uniqueness case-insensitive, and add a
@@ -105,8 +134,8 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        // schema.sql defines 13 tables.
-        assert_eq!(count, 13);
+        // schema.sql defines 15 tables (13 + chat_transcripts + chat_messages).
+        assert_eq!(count, 15);
     }
 
     #[test]
@@ -126,7 +155,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
     }
 
     #[test]

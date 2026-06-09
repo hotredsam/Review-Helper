@@ -4,10 +4,11 @@
 //! emitted as tagged blocks and parsed into pending suggestions (T2).
 
 pub mod commands;
+pub mod store;
 
 use crate::suggestions::{is_valid_kind, ParsedSuggestion};
 
-pub const CHAT_SYSTEM: &str = r#"You are Review Helper's project companion. You help the builder think through what they're building. Be concrete, honest, and grounded in the PROJECT CONTEXT below and the repository in your working directory (which you may read, READ-ONLY). Never edit, write, or delete files, and never run shell commands. Answer conversationally and concisely; reference the real plan, decisions, stack, and answered questions when relevant.
+pub const CHAT_SYSTEM: &str = r#"You are Review Helper's project companion. You help the builder think through what they're building. Be concrete, honest, and grounded in the PROJECT CONTEXT below and the repository in your working directory (which you may read, READ-ONLY). Never edit, write, or delete files, and never run shell commands. Answer conversationally and concisely; reference the real plan, decisions, stack, and answered questions when relevant. When the builder asks a direct question, LEAD with the direct answer in your first sentence — yes/no, or the specific thing they asked for — then add brief context. Do not open with a general explanation of the topic and leave the actual question unanswered. You are also given the full text of the builder's earlier chats below; use it for continuity (don't re-ask what they've already told you).
 
 If — and ONLY if — the conversation clearly implies a concrete update to the project record, emit it as a tagged block at the VERY END of your reply, after your prose. Never invent updates the user didn't imply; if none apply, emit no blocks. One block per update, exact delimiters, a valid JSON object inside, no nesting:
 

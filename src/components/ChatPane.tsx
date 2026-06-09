@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Loader2, Send, MessagesSquare, Lightbulb, Check, X } from "lucide-react";
 import { useChatStore, ensureChatListener, type Message } from "../store/chatStore";
 import { useDecisionsStore } from "../store/decisionsStore";
+import { ChatHistoryRail } from "./ChatHistoryRail";
 import type { Suggestion } from "../api/suggestions";
 import type { Project } from "../api/projects";
 
@@ -24,23 +25,24 @@ function summarize(s: Suggestion): string {
   }
 }
 
-/** Two-way chat: a grounded conversation that references project state and
- *  resumes across turns. Inferred updates surface as pending suggestions (T2). */
+/** Two-way chat: a grounded conversation that references project state. Chats are
+ *  persisted (a past-chats rail + New chat), and the model is given the full text
+ *  of all prior chats. Inferred updates surface as pending suggestions. */
 export function ChatPane({ project }: { project: Project }) {
   const id = project.id;
-  // Raw selects + defaults outside the selector (avoids fresh-value render loops).
-  const messagesRaw = useChatStore((s) => s.messages[id]);
+  const activeId = useChatStore((s) => s.activeId[id]);
+  const messagesRaw = useChatStore((s) => (activeId != null ? s.messages[activeId] : undefined));
   const messages = messagesRaw ?? EMPTY;
   const status = useChatStore((s) => s.status[id] ?? "idle");
   const error = useChatStore((s) => s.error[id]);
   const send = useChatStore((s) => s.send);
+  const loadProject = useChatStore((s) => s.loadProject);
   const loadPending = useChatStore((s) => s.loadPending);
   const pendingRaw = useChatStore((s) => s.pending[id]);
   const pending = pendingRaw ?? EMPTY_SUG;
   const approveSuggestion = useDecisionsStore((s) => s.approve);
   const dismissSuggestion = useDecisionsStore((s) => s.dismiss);
 
-  // Approve/dismiss in context, then refresh the chat's pending view.
   const act = async (fn: (id: number, sid: number) => Promise<void>, sid: number) => {
     await fn(id, sid);
     await loadPending(id);
@@ -53,8 +55,9 @@ export function ChatPane({ project }: { project: Project }) {
     ensureChatListener();
   }, []);
   useEffect(() => {
-    void loadPending(id); // surface any pre-existing pending proposals
-  }, [id, loadPending]);
+    void loadProject(id);
+    void loadPending(id);
+  }, [id, loadProject, loadPending]);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
@@ -75,95 +78,100 @@ export function ChatPane({ project }: { project: Project }) {
   };
 
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col p-6">
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-auto pb-4">
-        {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <MessagesSquare className="h-8 w-8 text-fg-subtle" />
-            <p className="text-sm font-medium text-fg">Talk through your project</p>
-            <p className="max-w-sm text-sm text-fg-muted">
-              The chat knows your plan, decisions, and stack. Anything it infers becomes a pending
-              suggestion you approve — nothing changes the record on its own.
+    <div className="flex h-full">
+      <div className="flex h-full min-w-0 flex-1 flex-col">
+        <div className="mx-auto flex h-full w-full max-w-3xl flex-col p-6">
+          <div ref={scrollRef} className="flex-1 space-y-3 overflow-auto pb-4">
+            {messages.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                <MessagesSquare className="h-8 w-8 text-fg-subtle" />
+                <p className="text-sm font-medium text-fg">Talk through your project</p>
+                <p className="max-w-sm text-sm text-fg-muted">
+                  The chat knows your plan, decisions, stack, and your earlier chats. Anything it
+                  infers becomes a pending suggestion you approve — nothing changes the record on its own.
+                </p>
+              </div>
+            ) : (
+              messages.map((m, i) => <Bubble key={i} message={m} />)
+            )}
+          </div>
+
+          {pending.length > 0 && (
+            <div
+              role="region"
+              aria-label="Pending suggestions"
+              className="mb-2 rounded-lg border border-border bg-surface p-3"
+            >
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <Lightbulb className="h-4 w-4 text-accent" />
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
+                  Pending suggestions
+                </h3>
+                <span className="text-xs text-fg-subtle">— approve or dismiss</span>
+              </div>
+              <ul className="space-y-1" aria-label="Pending suggestion list">
+                {pending.map((s) => (
+                  <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="min-w-0 truncate">
+                      <span className="mr-2 rounded-full bg-surface-2 px-2 py-0.5 text-xs capitalize text-fg-muted">
+                        {s.kind}
+                      </span>
+                      {summarize(s)}
+                    </span>
+                    <span className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => void act(approveSuggestion, s.id)}
+                        aria-label={`Approve ${s.kind}`}
+                        className="flex items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-fg hover:bg-accent-hover"
+                      >
+                        <Check className="h-3 w-3" /> Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void act(dismissSuggestion, s.id)}
+                        aria-label={`Dismiss ${s.kind}`}
+                        className="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-fg-muted hover:bg-surface-2"
+                      >
+                        <X className="h-3 w-3" /> Dismiss
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {error && (
+            <p className="mb-2 text-sm text-danger" role="alert">
+              {error}
             </p>
-          </div>
-        ) : (
-          messages.map((m, i) => <Bubble key={i} message={m} />)
-        )}
-      </div>
+          )}
 
-      {pending.length > 0 && (
-        <div
-          role="region"
-          aria-label="Pending suggestions"
-          className="mb-2 rounded-lg border border-border bg-surface p-3"
-        >
-          <div className="mb-1.5 flex items-center gap-1.5">
-            <Lightbulb className="h-4 w-4 text-accent" />
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
-              Pending suggestions
-            </h3>
-            <span className="text-xs text-fg-subtle">— approve or dismiss</span>
+          <div className="flex items-end gap-2 border-t border-border pt-3">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={onKeyDown}
+              rows={2}
+              maxLength={20000}
+              placeholder="Ask about your project, or think out loud…"
+              aria-label="Chat message"
+              className="flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/40"
+            />
+            <button
+              type="button"
+              onClick={submit}
+              disabled={streaming || !draft.trim()}
+              aria-label="Send"
+              className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+            >
+              {streaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </button>
           </div>
-          <ul className="space-y-1" aria-label="Pending suggestion list">
-            {pending.map((s) => (
-              <li key={s.id} className="flex items-center justify-between gap-2 text-sm">
-                <span className="min-w-0 truncate">
-                  <span className="mr-2 rounded-full bg-surface-2 px-2 py-0.5 text-xs capitalize text-fg-muted">
-                    {s.kind}
-                  </span>
-                  {summarize(s)}
-                </span>
-                <span className="flex shrink-0 gap-1">
-                  <button
-                    type="button"
-                    onClick={() => void act(approveSuggestion, s.id)}
-                    aria-label={`Approve ${s.kind}`}
-                    className="flex items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-fg hover:bg-accent-hover"
-                  >
-                    <Check className="h-3 w-3" /> Approve
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void act(dismissSuggestion, s.id)}
-                    aria-label={`Dismiss ${s.kind}`}
-                    className="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-fg-muted hover:bg-surface-2"
-                  >
-                    <X className="h-3 w-3" /> Dismiss
-                  </button>
-                </span>
-              </li>
-            ))}
-          </ul>
         </div>
-      )}
-
-      {error && (
-        <p className="mb-2 text-sm text-danger" role="alert">
-          {error}
-        </p>
-      )}
-
-      <div className="flex items-end gap-2 border-t border-border pt-3">
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
-          rows={2}
-          maxLength={20000}
-          placeholder="Ask about your project, or think out loud…"
-          aria-label="Chat message"
-          className="flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/40"
-        />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={streaming || !draft.trim()}
-          aria-label="Send"
-          className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-accent-fg hover:bg-accent-hover disabled:opacity-60"
-        >
-          {streaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </button>
       </div>
+      <ChatHistoryRail project={id} />
     </div>
   );
 }

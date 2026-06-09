@@ -1,5 +1,14 @@
 import { create } from "zustand";
-import { chatSend, onChatEvent, type ChatEvent } from "../api/chat";
+import {
+  chatSend,
+  chatNew,
+  chatTranscripts,
+  chatMessages,
+  chatDelete,
+  onChatEvent,
+  type ChatEvent,
+  type TranscriptMeta,
+} from "../api/chat";
 import { suggestionsList, type Suggestion } from "../api/suggestions";
 
 export interface Message {
@@ -10,92 +19,187 @@ export interface Message {
 
 type Status = "idle" | "streaming" | "error";
 
-// Chat history is intentionally ephemeral (kept in memory): multi-turn resume
-// relies on the model's session_id, not a persisted transcript.
+/**
+ * Transcripts persist (v3). State is split by axis: transcripts + the active
+ * transcript are per-project; messages are keyed by transcript id; status/error/
+ * pending are per-project. Events route by transcript_id so the right chat gets
+ * its tokens even if the user switched chats.
+ */
 interface ChatStore {
+  transcripts: Record<number, TranscriptMeta[]>;
+  activeId: Record<number, number | null>;
   messages: Record<number, Message[]>;
-  session: Record<number, string | null>;
   status: Record<number, Status>;
   error: Record<number, string | null>;
   pending: Record<number, Suggestion[]>;
-  send: (id: number, message: string) => Promise<void>;
-  loadPending: (id: number) => Promise<void>;
+  loadProject: (project: number) => Promise<void>;
+  openTranscript: (project: number, transcriptId: number) => Promise<void>;
+  newChat: (project: number) => Promise<void>;
+  removeTranscript: (project: number, transcriptId: number) => Promise<void>;
+  send: (project: number, message: string) => Promise<void>;
+  loadPending: (project: number) => Promise<void>;
 }
 
+const toMsgs = (rows: { role: "user" | "assistant"; content: string }[]): Message[] =>
+  rows.map((r) => ({ role: r.role, text: r.content }));
+
 export const useChatStore = create<ChatStore>((set, get) => ({
+  transcripts: {},
+  activeId: {},
   messages: {},
-  session: {},
   status: {},
   error: {},
   pending: {},
 
-  loadPending: async (id) => {
+  loadProject: async (project) => {
     try {
-      const ps = await suggestionsList(id, "pending");
-      set((s) => ({ pending: { ...s.pending, [id]: ps } }));
-    } catch {
-      // non-fatal: the chat still works without the proposals panel
+      const list = await chatTranscripts(project);
+      // Already initialized: just refresh the rail.
+      if (get().activeId[project] != null) {
+        set((s) => ({ transcripts: { ...s.transcripts, [project]: list } }));
+        return;
+      }
+      if (list.length === 0) {
+        const id = await chatNew(project);
+        const meta: TranscriptMeta = { id, title: null, updated_at: "", message_count: 0 };
+        set((s) => ({
+          transcripts: { ...s.transcripts, [project]: [meta] },
+          activeId: { ...s.activeId, [project]: id },
+          messages: { ...s.messages, [id]: [] },
+        }));
+      } else {
+        const id = list[0].id;
+        const msgs = toMsgs(await chatMessages(id));
+        set((s) => ({
+          transcripts: { ...s.transcripts, [project]: list },
+          activeId: { ...s.activeId, [project]: id },
+          messages: { ...s.messages, [id]: msgs },
+        }));
+      }
+    } catch (e) {
+      set((s) => ({ error: { ...s.error, [project]: String(e) } }));
     }
   },
 
-  send: async (id, message) => {
+  openTranscript: async (project, transcriptId) => {
+    set((s) => ({ activeId: { ...s.activeId, [project]: transcriptId } }));
+    if (get().messages[transcriptId] === undefined) {
+      try {
+        const msgs = toMsgs(await chatMessages(transcriptId));
+        set((s) => ({ messages: { ...s.messages, [transcriptId]: msgs } }));
+      } catch (e) {
+        set((s) => ({ error: { ...s.error, [project]: String(e) } }));
+      }
+    }
+  },
+
+  newChat: async (project) => {
+    try {
+      const id = await chatNew(project);
+      const meta: TranscriptMeta = { id, title: null, updated_at: "", message_count: 0 };
+      set((s) => ({
+        transcripts: { ...s.transcripts, [project]: [meta, ...(s.transcripts[project] ?? [])] },
+        activeId: { ...s.activeId, [project]: id },
+        messages: { ...s.messages, [id]: [] },
+      }));
+    } catch (e) {
+      set((s) => ({ error: { ...s.error, [project]: String(e) } }));
+    }
+  },
+
+  removeTranscript: async (project, transcriptId) => {
+    try {
+      await chatDelete(transcriptId);
+    } catch {
+      // non-fatal
+    }
+    const wasActive = get().activeId[project] === transcriptId;
+    set((s) => ({
+      transcripts: { ...s.transcripts, [project]: (s.transcripts[project] ?? []).filter((t) => t.id !== transcriptId) },
+    }));
+    if (wasActive) {
+      set((s) => ({ activeId: { ...s.activeId, [project]: null } }));
+      const remaining = get().transcripts[project] ?? [];
+      if (remaining.length > 0) await get().openTranscript(project, remaining[0].id);
+      else await get().newChat(project);
+    }
+  },
+
+  send: async (project, message) => {
     const msg = message.trim();
-    if (!msg || get().status[id] === "streaming") return;
+    if (!msg || get().status[project] === "streaming") return;
+    let tid = get().activeId[project];
+    if (tid == null) {
+      await get().newChat(project);
+      tid = get().activeId[project];
+      if (tid == null) return;
+    }
+    const transcriptId = tid;
     set((s) => ({
       messages: {
         ...s.messages,
-        [id]: [
-          ...(s.messages[id] ?? []),
+        [transcriptId]: [
+          ...(s.messages[transcriptId] ?? []),
           { role: "user", text: msg },
           { role: "assistant", text: "", streaming: true },
         ],
       },
-      status: { ...s.status, [id]: "streaming" },
-      error: { ...s.error, [id]: null },
+      status: { ...s.status, [project]: "streaming" },
+      error: { ...s.error, [project]: null },
     }));
     try {
-      await chatSend(id, msg, get().session[id] ?? null);
+      await chatSend(project, transcriptId, msg);
     } catch (e) {
-      patchLastAssistant(id, (m) => ({ ...m, streaming: false }));
-      set((s) => ({ status: { ...s.status, [id]: "error" }, error: { ...s.error, [id]: String(e) } }));
+      patchLastAssistant(transcriptId, (m) => ({ ...m, streaming: false }));
+      set((s) => ({ status: { ...s.status, [project]: "error" }, error: { ...s.error, [project]: String(e) } }));
+    }
+  },
+
+  loadPending: async (project) => {
+    try {
+      const ps = await suggestionsList(project, "pending");
+      set((s) => ({ pending: { ...s.pending, [project]: ps } }));
+    } catch {
+      // non-fatal: the chat still works without the proposals panel
     }
   },
 }));
 
-function patchLastAssistant(id: number, fn: (m: Message) => Message) {
+function patchLastAssistant(transcriptId: number, fn: (m: Message) => Message) {
   useChatStore.setState((s) => {
-    const msgs = (s.messages[id] ?? []).slice();
+    const msgs = (s.messages[transcriptId] ?? []).slice();
     for (let i = msgs.length - 1; i >= 0; i--) {
       if (msgs[i].role === "assistant") {
         msgs[i] = fn(msgs[i]);
         break;
       }
     }
-    return { messages: { ...s.messages, [id]: msgs } };
+    return { messages: { ...s.messages, [transcriptId]: msgs } };
   });
 }
 
 function handle(e: ChatEvent) {
-  const id = e.project_id;
   switch (e.type) {
     case "started":
-      break; // the streaming assistant placeholder is added in send()
+    case "tool":
+      break;
     case "token":
-      patchLastAssistant(id, (m) => ({ ...m, text: m.text + e.text }));
+      patchLastAssistant(e.transcript_id, (m) => ({ ...m, text: m.text + e.text }));
       break;
     case "done":
-      patchLastAssistant(id, (m) => ({ ...m, text: e.reply, streaming: false }));
-      useChatStore.setState((s) => ({
-        session: { ...s.session, [id]: e.session_id },
-        status: { ...s.status, [id]: "idle" },
-      }));
-      if (e.suggestions > 0) void useChatStore.getState().loadPending(id);
+      patchLastAssistant(e.transcript_id, (m) => ({ ...m, text: e.reply, streaming: false }));
+      useChatStore.setState((s) => ({ status: { ...s.status, [e.project_id]: "idle" } }));
+      // refresh the rail (titles + counts) and pending proposals
+      void chatTranscripts(e.project_id)
+        .then((list) => useChatStore.setState((s) => ({ transcripts: { ...s.transcripts, [e.project_id]: list } })))
+        .catch(() => {});
+      if (e.suggestions > 0) void useChatStore.getState().loadPending(e.project_id);
       break;
     case "failed":
-      patchLastAssistant(id, (m) => ({ ...m, streaming: false }));
+      patchLastAssistant(e.transcript_id, (m) => ({ ...m, streaming: false }));
       useChatStore.setState((s) => ({
-        status: { ...s.status, [id]: "error" },
-        error: { ...s.error, [id]: e.detail },
+        status: { ...s.status, [e.project_id]: "error" },
+        error: { ...s.error, [e.project_id]: e.detail },
       }));
       break;
   }
