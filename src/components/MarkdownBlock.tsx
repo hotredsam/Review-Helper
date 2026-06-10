@@ -1,3 +1,4 @@
+import { openExternal } from "../lib/external";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -14,7 +15,17 @@ const COMPONENTS: Components = {
   li: (p) => <li className="leading-relaxed" {...p} />,
   strong: (p) => <strong className="font-semibold text-fg" {...p} />,
   em: (p) => <em className="italic" {...p} />,
-  a: (p) => <a className="text-accent hover:underline" {...p} />,
+  a: ({ href, ...p }) => (
+    <a
+      href={href}
+      className="text-accent hover:underline"
+      {...p}
+      onClick={(e) => {
+        e.preventDefault();
+        openExternal(href);
+      }}
+    />
+  ),
   code: (p) => <code className="rounded bg-surface-2 px-1 py-0.5 font-mono text-[0.85em] text-fg" {...p} />,
   pre: (p) => <pre className="my-2 overflow-auto rounded-md bg-surface-2 p-2 text-xs text-fg" {...p} />,
   blockquote: (p) => <blockquote className="my-2 border-l-2 border-border pl-3 text-fg-subtle" {...p} />,

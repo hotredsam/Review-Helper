@@ -80,6 +80,9 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     if version < 9 {
         migration_step(conn, 9, migrate_v9)?;
     }
+    if version < 10 {
+        migration_step(conn, 10, migrate_v10)?;
+    }
     Ok(())
 }
 
@@ -320,6 +323,12 @@ fn migrate_v9(conn: &Connection) -> rusqlite::Result<()> {
     )
 }
 
+/// v10 (docs-grounded grill): a grill question may cite the official doc it
+/// was grounded in.
+fn migrate_v10(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch("ALTER TABLE questions ADD COLUMN doc_ref TEXT;")
+}
+
 /// Run one migration step atomically: the schema change and the version bump
 /// commit together, so a crash mid-step rolls back to a cleanly re-runnable
 /// state instead of stranding a half-applied version.
@@ -414,7 +423,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
     }
 
     #[test]
@@ -452,7 +461,7 @@ mod tests {
         conn.execute_batch("CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT);").unwrap();
         run_migrations(&conn).expect("a partial base schema must not brick the app");
         let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert!(v >= 9);
+        assert!(v >= 10);
         // The real schema replaced the partial table (kind column exists).
         conn.execute("INSERT INTO projects (name, kind) VALUES ('ok','new')", []).unwrap();
     }

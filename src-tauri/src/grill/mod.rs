@@ -22,6 +22,7 @@ pub struct Question {
     pub recommended_answer: Option<String>,
     pub ui_spec: Option<Value>,
     pub status: String,
+    pub doc_ref: Option<String>,
 }
 
 /// Persist a generated batch as open questions, atomically. Returns the count
@@ -32,8 +33,8 @@ pub fn save_questions(conn: &mut Connection, project_id: i64, qs: &[GenQuestion]
     for q in qs {
         let ui_spec = q.ui_spec.as_ref().and_then(|s| serde_json::to_string(s).ok());
         tx.execute(
-            "INSERT INTO questions (project_id, dimension, bank_topic, text, recommended_answer, ui_spec, status) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'open')",
+            "INSERT INTO questions (project_id, dimension, bank_topic, text, recommended_answer, ui_spec, doc_ref, status) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'open')",
             params![
                 project_id,
                 q.dimension.trim(),
@@ -41,6 +42,7 @@ pub fn save_questions(conn: &mut Connection, project_id: i64, qs: &[GenQuestion]
                 q.question.trim(),
                 q.recommended_answer.trim(),
                 ui_spec,
+                q.doc_ref,
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -54,7 +56,7 @@ pub fn save_questions(conn: &mut Connection, project_id: i64, qs: &[GenQuestion]
 pub fn list_questions(conn: &Connection, project_id: i64) -> Result<Vec<Question>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, dimension, bank_topic, text, recommended_answer, ui_spec, status FROM questions \
+            "SELECT id, dimension, bank_topic, text, recommended_answer, ui_spec, doc_ref, status FROM questions \
              WHERE project_id = ?1 AND status != 'deleted' ORDER BY id",
         )
         .map_err(|e| e.to_string())?;
@@ -66,7 +68,8 @@ pub fn list_questions(conn: &Connection, project_id: i64) -> Result<Vec<Question
             text: r.get(3)?,
             recommended_answer: r.get(4)?,
             ui_spec: r.get::<_, Option<String>>(5)?.and_then(|s| serde_json::from_str(&s).ok()),
-            status: r.get(6)?,
+            doc_ref: r.get(6)?,
+            status: r.get(7)?,
         })
     })
     .and_then(Iterator::collect)
@@ -159,6 +162,7 @@ mod tests {
             bank_topic: topic.into(),
             question: q.into(),
             recommended_answer: a.into(),
+            doc_ref: None,
             ui_spec: None,
         }
     }

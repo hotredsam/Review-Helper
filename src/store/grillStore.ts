@@ -20,7 +20,7 @@ interface GrillStore {
   error: Record<number, string | null>;
   depth: Record<number, number>;
   load: (id: number) => Promise<void>;
-  generate: (id: number, depth: number) => Promise<void>;
+  generate: (id: number, depth: number, withDocs?: boolean) => Promise<void>;
   setDepth: (id: number, depth: number) => void;
   // Per-card actions: mutate then reload so the card moves to addressed. They
   // throw on failure so the card can show a local error (no pane-wide error).
@@ -47,7 +47,7 @@ export const useGrillStore = create<GrillStore>((set, get) => ({
     }
   },
 
-  generate: async (id, depth) => {
+  generate: async (id, depth, withDocs = false) => {
     if (get().status[id] === "running") return; // don't double-spend a run
     set((s) => ({
       status: { ...s.status, [id]: "running" },
@@ -55,7 +55,7 @@ export const useGrillStore = create<GrillStore>((set, get) => ({
       error: { ...s.error, [id]: null },
     }));
     try {
-      await grillGenerate(id, depth);
+      await grillGenerate(id, depth, withDocs);
     } catch (e) {
       set((s) => ({ status: { ...s.status, [id]: "error" }, error: { ...s.error, [id]: String(e) } }));
     }

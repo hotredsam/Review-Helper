@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Loader2, MessageSquareQuote, AlertTriangle, Sparkles } from "lucide-react";
 import { useGrillStore, ensureGrillListener, computeCoverage } from "../store/grillStore";
 import { QuestionCard } from "./QuestionCard";
@@ -35,6 +35,7 @@ export function GrillPane({ project }: { project: Project }) {
   const load = useGrillStore((s) => s.load);
   const generate = useGrillStore((s) => s.generate);
   const depth = useGrillStore((s) => s.depth[id] ?? DEFAULT_DEPTH);
+  const [withDocs, setWithDocs] = useState(false);
 
   useEffect(() => {
     ensureGrillListener();
@@ -64,7 +65,7 @@ export function GrillPane({ project }: { project: Project }) {
         <p className="max-w-sm text-sm text-danger" role="alert">
           {error ?? "Grilling failed."}
         </p>
-        <GenerateButton onClick={() => void generate(id, depth)} label="Try again" />
+        <GenerateButton onClick={() => void generate(id, depth, withDocs)} label="Try again" />
       </Center>
     );
   }
@@ -87,7 +88,7 @@ export function GrillPane({ project }: { project: Project }) {
           pin down what you're building.
         </p>
         <DepthSlider projectId={id} />
-        <GenerateButton onClick={() => void generate(id, depth)} label="Start grilling" />
+        <GenerateButton onClick={() => void generate(id, depth, withDocs)} label="Start grilling" />
       </Center>
     );
   }
@@ -103,9 +104,13 @@ export function GrillPane({ project }: { project: Project }) {
 
       <div className="flex items-center justify-between gap-3">
         <DepthSlider projectId={id} />
+        <label className="flex items-center gap-1.5 text-xs text-fg-muted" title="Read the official docs for your stack first; grounded questions cite their source (slower — inspired by Matt Pocock's grill-with-docs)">
+          <input type="checkbox" checked={withDocs} onChange={(e) => setWithDocs(e.target.checked)} aria-label="Ground in official docs" />
+          Ground in docs
+        </label>
         <button
           type="button"
-          onClick={() => void generate(id, depth)}
+          onClick={() => void generate(id, depth, withDocs)}
           className="rounded-md border border-border px-3 py-1.5 text-xs text-fg-muted hover:bg-surface-2"
         >
           {cov.done ? "Go deeper" : "Ask more"}

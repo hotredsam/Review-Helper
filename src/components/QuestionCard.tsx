@@ -1,3 +1,4 @@
+import { openExternal } from "../lib/external";
 import { useState } from "react";
 import { Loader2, Check, X, HelpCircle, MessagesSquare, Trash2, type LucideIcon } from "lucide-react";
 import { useGrillStore } from "../store/grillStore";
@@ -45,6 +46,16 @@ export function QuestionCard({ projectId, question }: { projectId: number; quest
         {question.bank_topic && <span className="text-xs text-fg-subtle">{question.bank_topic}</span>}
       </div>
       <p className="text-sm font-medium text-fg">{question.text}</p>
+      {question.doc_ref && (
+        <button
+          type="button"
+          onClick={() => openExternal(question.doc_ref ?? undefined)}
+          className="mt-1 inline-flex w-fit items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] text-fg-muted hover:bg-surface-2 hover:text-fg"
+          title={question.doc_ref}
+        >
+          📚 grounded in docs
+        </button>
+      )}
       {question.recommended_answer && (
         <p className="mt-1.5 text-sm text-fg-muted">
           <span className="font-medium text-fg-subtle">Recommended:</span> {question.recommended_answer}{" "}

@@ -18,6 +18,8 @@ export interface Question {
   recommended_answer: string | null;
   ui_spec?: UiSpec | null;
   status: string;
+  /** Docs-grounded mode: the official-doc URL this question cites. */
+  doc_ref?: string | null;
 }
 
 export type GrillEvent =
@@ -27,8 +29,8 @@ export type GrillEvent =
   | { type: "failed"; project_id: number; detail: string };
 
 /** Generate a batch of repo-specific questions, scaled by depth (1–5). */
-export function grillGenerate(id: number, depth: number): Promise<void> {
-  return invoke("grill_generate", { projectId: id, depth });
+export function grillGenerate(id: number, depth: number, withDocs = false): Promise<void> {
+  return invoke("grill_generate", { projectId: id, depth, withDocs });
 }
 
 export function grillList(id: number): Promise<Question[]> {

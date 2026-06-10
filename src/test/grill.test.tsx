@@ -127,6 +127,6 @@ describe("depth slider", () => {
     await screen.findByText(/Detail coverage/i);
     fireEvent.change(screen.getByLabelText("Grill depth"), { target: { value: "5" } });
     await user.click(screen.getByRole("button", { name: /Ask more|Go deeper/i }));
-    expect(vi.mocked(grillGenerate)).toHaveBeenCalledWith(202, 5);
+    expect(vi.mocked(grillGenerate)).toHaveBeenCalledWith(202, 5, false);
   });
 });

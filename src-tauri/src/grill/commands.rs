@@ -36,6 +36,7 @@ pub fn grill_generate(
     db: State<'_, Db>,
     project_id: i64,
     depth: i64,
+    with_docs: Option<bool>,
 ) -> Result<(), String> {
     // Validate the project exists before spawning; everything heavy is off-thread.
     {
@@ -45,13 +46,13 @@ pub fn grill_generate(
     let app = app.clone();
     let report = app.clone();
     crate::util::spawn_guarded(
-        move || run_grill(app, project_id, depth.clamp(1, 5)),
+        move || run_grill(app, project_id, depth.clamp(1, 5), with_docs.unwrap_or(false)),
         move || { let _ = report.emit("grill-event", &GrillEvent::Failed { project_id, detail: "Grilling crashed unexpectedly.".into() }); },
     );
     Ok(())
 }
 
-fn run_grill(app: AppHandle, project_id: i64, depth: i64) {
+fn run_grill(app: AppHandle, project_id: i64, depth: i64, with_docs: bool) {
     let emit = |ev: GrillEvent| {
         let _ = app.emit("grill-event", &ev);
     };
@@ -100,7 +101,11 @@ fn run_grill(app: AppHandle, project_id: i64, depth: i64) {
     };
 
     let mut req = ModelRequest::planning(grill_user(&topics));
-    req.system_append = Some(format!("{GRILL_SYSTEM}\n\n{context}"));
+    req.system_append = Some(if with_docs {
+        format!("{GRILL_SYSTEM}\n\n{}\n\n{context}", super::generate::GRILL_DOCS_ADDENDUM)
+    } else {
+        format!("{GRILL_SYSTEM}\n\n{context}")
+    });
     if let Some(cp) = clone_path {
         req.cwd = Some(cp);
     }

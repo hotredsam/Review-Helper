@@ -61,7 +61,7 @@ flowchart LR
 ```
 
 - **Assess** scores six vibecoding dimensions plus production readiness, grounded in repo metrics rather than vibes.
-- **Grill** asks repo-specific questions, each with a recommended answer and a model-chosen input type; a coverage meter tracks how specified you are.
+- **Grill** asks repo-specific questions, each with a recommended answer and a model-chosen input type; a coverage meter tracks how specified you are. A **docs-grounded mode** (a nod to Matt Pocock's grill-with-docs skill) has the model read your stack's official documentation first — grounded questions carry a 📚 chip linking the exact page they came from.
 - **Chat** has persistent cross-chat memory; inferred decisions, features, and stack choices arrive as suggestions you approve singly or in bulk.
 - **Plan → GitHub** pushes one issue per phase (stable markers, so re-pushes update instead of duplicating). Issue closes and file deletions happen only behind an exact, confirmed preview that is cryptographically bound to the project it was computed for.
 - **Voice capture**: dictate inbox ideas to an on-device Whisper model (`large-v3-turbo`, Metal) — live partial transcripts while you speak, ~3× realtime on an M4, nothing uploaded.

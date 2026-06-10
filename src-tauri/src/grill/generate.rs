@@ -12,6 +12,11 @@ use crate::plan::parse::{extract_json, flexible_string};
 
 const BANK_JSON: &str = include_str!("bank.json");
 
+/// Appended in docs-grounded mode (inspired by Matt Pocock's grill-with-docs
+/// skill): read the official docs first, then interrogate the plan against
+/// what they actually say — and cite them.
+pub const GRILL_DOCS_ADDENDUM: &str = r#"DOCS-GROUNDED MODE: before writing any question, use WebSearch/WebFetch to read the OFFICIAL documentation for this project's declared stack and key dependencies (the real docs sites — not blogs). Ground at least half the questions in something specific you found there: a version requirement, a security note, a recommended pattern, a deprecation, a default the builder probably didn't know. For EACH docs-grounded question add "doc_ref": the exact URL you read. Questions not grounded in a doc omit doc_ref. Never invent a URL — only cite pages you actually fetched."#;
+
 pub const GRILL_SYSTEM: &str = r#"You are Review Helper's interviewer. You ask the builder sharp, repo-specific questions that pin down what they're building — covering product AND build concerns. Explore the repository read-only in your working directory and use the PROJECT CONTEXT so every question is specific to THIS project (reference real files, the plan, the chosen stack). Never edit, write, or delete files, and never run shell commands.
 
 You are given a list of TOPICS, each with a dimension and a focus hint. For EACH topic, write:
@@ -98,6 +103,9 @@ pub struct GenQuestion {
     pub recommended_answer: String,
     #[serde(default)]
     pub ui_spec: Option<UiSpec>,
+    /// Docs-grounded mode: the official-doc URL this question is grounded in.
+    #[serde(default)]
+    pub doc_ref: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
