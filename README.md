@@ -4,7 +4,7 @@
 
 <br/>
 
-**A macOS desktop app that helps you _vibecode the right way_ — analyze a project, score it, get grilled until it's specified well enough to actually build, then ship a phased plan to GitHub. Plus a full _Learning mode_ that adapts study material to how you actually learn.**
+**Plan it properly, get grilled until it's specified, ship a phased plan to GitHub — then flip one switch and use the same engine to study anything.**
 
 <br/>
 
@@ -13,220 +13,171 @@
 ![Rust](https://img.shields.io/badge/Rust-backend-CE412B?logo=rust&logoColor=white)
 ![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
-![Tailwind v4](https://img.shields.io/badge/Tailwind-v4-38BDF8?logo=tailwindcss&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-embedded-003B57?logo=sqlite&logoColor=white)
 <br/>
-![status](https://img.shields.io/badge/status-v0.1%20feature--complete-3FB950)
-![modes](https://img.shields.io/badge/modes-Code%20%2B%20Learning-8957E5)
-![themes](https://img.shields.io/badge/themes-8-38BDF8)
-![review](https://img.shields.io/badge/council%20review-5%20rounds-8957E5)
-![tests](https://img.shields.io/badge/tests-124%20backend%20%C2%B7%2086%20frontend-3FB950)
+![phases](https://img.shields.io/badge/build-21%2F21%20phases-3FB950)
+![audit](https://img.shields.io/badge/audit-52%2F52%20findings%20fixed-3FB950)
+![tests](https://img.shields.io/badge/tests-159%20backend%20%C2%B7%20103%20frontend-3FB950)
+![local](https://img.shields.io/badge/voice%20%26%20RAG-fully%20local-8957E5)
 
 </div>
 
 ---
 
-## What is this?
+Review Helper is a native macOS app for people who build with AI coding agents. Most AI-assisted projects don't fail at the code — they fail at the **spec**. This app points a model at your repo (or just an idea), scores it on the dimensions that decide whether an agent build succeeds, interrogates the gaps until the project is actually specified, and produces one phased plan synced to GitHub issues. You hand that plan to your agent and build phase by phase.
 
-Review Helper turns _"I have a vague app idea"_ into a build you can trust. It points a model at your project (or just your description), scores it across the dimensions that make AI-assisted builds succeed or fail, interrogates the gaps, teaches you the concepts as you go, and produces a single consistent **phased plan** synced to GitHub issues. You hand that plan to your coding agent and build it phase by phase — with the guardrails already in place.
-
-It's one self-contained native app: a Rust backend with embedded SQLite and a React UI. No servers to run, no separate database to launch.
-
-## Why
-
-Most AI-assisted projects don't fail at the code — they fail at the **spec**: under-specified ideas, the model loose in your filesystem, secrets committed by accident, finished work silently rebuilt. Review Helper closes those failure modes by construction.
+It is one self-contained `.app`: Rust backend, embedded SQLite, React UI. No servers, no cloud database — and the voice capture, embeddings, and learner profile never leave your Mac.
 
 > [!NOTE]
-> **The model is read-only against your source.** Planning and analysis run with read/search tools only — never write, edit, or shell. The app performs every file write, commit, and issue change itself, and only after you approve it. Model-inferred changes arrive as **pending suggestions**, never silent writes; secrets are blocked from commits by a deterministic scanner; and the database schema ships pre-tested.
-
-## Features
-
-- 🔍 **Analyze & score** — six vibecoding dimensions, a separate production-readiness scorecard, and a hygiene check, all 0–100 and grounded in real repo metrics rather than vibes.
-- 🔥 **Grill-me** — repo-specific questions (each with a draft answer) that pin down what you're actually building, **rendered as real inputs** (choices, sliders, short/long text) the model picks per question. A depth slider and a **Detail Coverage** meter tell you when you've specified enough.
-- 📚 **Understand hub** — a self-extending, **filterable** card library spanning architecture, frontend, backend, pipes, deployment, business, design and UX. Filter to **just this project**, generate a card for any term, and open an **inline mini-chat** on any card to dig deeper.
-- 💬 **Two-way chat & memory** — talk your project through; chats **persist across restarts** with a past-chats rail and **full cross-chat memory**, and anything the model infers becomes a pending suggestion you approve (single or bulk) — nothing reaches the record silently.
-- 🪄 **Easy ↔ Technical** — one global toggle flips every explanation between plain-language and precise-technical registers; the model pre-generates both, so switching is instant and free.
-- 🗂️ **Decisions, stack & feature inbox** — an ADR-style decision log (with supersede history), a five-pane stack picker, and a quick-capture inbox that nudges you to fold ideas into the plan.
-- 🧭 **Plan → GitHub** — one consistent phased plan rendered as clean Markdown with collapsible phases, synced one-way to issues (one per phase, matched by a stable marker so re-pushes update instead of duplicating), behind a gated, fully-previewed push to `main`.
-- 🔌 **One-press Claude connect** — if the Claude CLI isn't reachable, the banner's "Connect in Terminal" button opens Terminal with `claude` already running and a hello prompt queued, walking you through login and proving the link.
-- 📚 **Grounded study answers (local RAG)** — uploads are chunked with contextual headers and indexed twice (SQLite FTS5 keywords + local `nomic-embed-text` vectors via Ollama), fused with Reciprocal Rank Fusion. The tutor answers *from your materials* with `[n]` citations, says so honestly when they don't cover a question, and — only with a per-subject opt-in — falls back to the web with a visible "Includes web results" badge. The common path adds zero extra model calls; Ollama down just means keyword-only search.
-- 🧠 **Adaptive profile** — two human-readable Markdown files (`learner-profile.md`, `review-preferences.md`) the app maintains from *measured* behavior: quiz accuracy, flashcard lapses, suggestion verdicts, grill answer depth. Deterministic facts cost zero model calls; one gated haiku-tier reflection per session writes evidence-cited observations that quietly tune the tutor, generators, plan, grill, assess, and chat. Open them, edit your notes section, or switch the whole thing off in Settings.
-- 🎙️ **Local voice capture** — dictate Inbox ideas to a real on-device Whisper model (`large-v3-turbo`, Metal-accelerated): live streaming partials while you speak, a clean final transcript on stop, and nothing ever leaves your Mac. Tested at ~3× realtime on an M4.
-- 🎓 **Learning mode** — a second top-level shell: name a subject (describe it or upload notes/a PDF), get **grilled on scope first**, pick from a **generatively-proposed study plan**, then study generated **notes, flashcards, and quizzes** with a built-in **tutor** — all adapting to how you actually learn ([see below](#learning-mode--study-anything-adaptively)).
-- 📊 **Visualization & onboarding** — radar/gauge/donut charts for the scorecard, a first-run tour, and inline "why" explainers.
-- 🖼️ **Design export** — `npm run export:design` bundles every screen (sample data, all themes) into one self-contained HTML snapshot on your Desktop.
-- 🎨 **Eight themes** — `light`, `dark`, `midnight`, `sand`, `nord`, `forest`, `rose`, `grape`, every surface driven by design tokens, WCAG-AA contrast, and full keyboard focus rings.
+> **The model can never touch your code.** Planning and analysis calls get read/search tools only — no write, no edit, no shell — enforced in one place all model use flows through. The app performs every file write, commit, and issue change itself, and only after you approve an exact preview. A deterministic scanner blocks secrets from every commit.
 
 ## Screenshots
 
-> 📸 This section is wired up — drop the six PNGs named below into [`docs/screenshots/`](./docs/screenshots/) (see the [capture guide](./docs/screenshots/README.md)) and they render here automatically. Capture on a project that has a generated plan + assessment so the data-rich views show real content.
-
 <table>
   <tr>
-    <td width="50%"><img src="./docs/screenshots/overview.png" alt="Overview — assessment scorecard"/><br/><sub><b>Overview</b> — six-dimension scorecard, production readiness, and hygiene as radar + gauges.</sub></td>
-    <td width="50%"><img src="./docs/screenshots/grill.png" alt="Grill — repo-specific questions"/><br/><sub><b>Grill</b> — repo-specific questions with draft answers, the depth slider, and the coverage meter.</sub></td>
+    <td width="50%"><img src="./docs/screenshots/overview.png" alt="Overview — assessment scorecard"/><br/><sub><b>Overview</b> — six vibecoding dimensions plus production readiness, scored 0–100 from real repo signals.</sub></td>
+    <td width="50%"><img src="./docs/screenshots/grill.png" alt="Grill — repo-specific questions"/><br/><sub><b>Grill</b> — repo-specific questions with draft answers; the coverage meter says when you've specified enough.</sub></td>
   </tr>
   <tr>
-    <td><img src="./docs/screenshots/plan.png" alt="Plan — phased plan"/><br/><sub><b>Plan</b> — the phased plan with tasks, decisions, and stack, plus the gated GitHub sync panel.</sub></td>
-    <td><img src="./docs/screenshots/chat.png" alt="Chat — pending suggestions"/><br/><sub><b>Chat</b> — two-way conversation with pending suggestions you approve or dismiss inline.</sub></td>
+    <td><img src="./docs/screenshots/plan.png" alt="Plan — phased plan"/><br/><sub><b>Plan</b> — phases, tasks with "done when" checks, decisions, and the gated GitHub sync.</sub></td>
+    <td><img src="./docs/screenshots/chat.png" alt="Chat — pending suggestions"/><br/><sub><b>Chat</b> — anything the model infers becomes a pending suggestion; nothing reaches the record silently.</sub></td>
   </tr>
   <tr>
-    <td><img src="./docs/screenshots/understand.png" alt="Understand hub"/><br/><sub><b>Understand</b> — the self-extending concept-card hub across every build domain.</sub></td>
-    <td><img src="./docs/screenshots/themes.png" alt="Eight themes"/><br/><sub><b>Themes</b> — the same screen across all eight: <code>light</code> · <code>dark</code> · <code>midnight</code> · <code>sand</code> · <code>nord</code> · <code>forest</code> · <code>rose</code> · <code>grape</code>.</sub></td>
+    <td><img src="./docs/screenshots/understand.png" alt="Understand hub"/><br/><sub><b>Understand</b> — a self-extending concept-card library; every card opens an inline chat.</sub></td>
+    <td><img src="./docs/screenshots/learning.png" alt="Learning mode"/><br/><sub><b>Learning mode</b> — the same engine pointed at anything you want to study.</sub></td>
   </tr>
 </table>
 
-## How it works — the planning loop
+## Code mode — the planning loop
 
-The sidebar follows the loop, in order: **understand → grill → chat → inbox → stack → decisions → plan → sync**. You gather understanding and scope first; the plan is the synthesis, not the starting point.
+The sidebar follows the loop: understand → grill → chat → inbox → stack → decisions → plan → sync. The plan is the synthesis, not the starting point.
 
 ```mermaid
 flowchart LR
-    U["📚 Understand"] --> G["🔥 Grill"] --> C["💬 Chat"] --> I["🗂️ Inbox"]
-    I --> S["🧱 Stack"] --> D["🧭 Decisions"] --> P["📋 Plan"] --> Y["🔄 Sync → GitHub"]
-    A["🔍 Assess / Overview"] -.-> U
+    U["Understand"] --> G["Grill"] --> C["Chat"] --> I["Inbox"]
+    I --> S["Stack"] --> D["Decisions"] --> P["Plan"] --> Y["Sync → GitHub"]
+    A["Assess"] -.-> U
     Y -.->|next iteration| U
 ```
 
-## Learning mode — study anything, adaptively
+- **Assess** scores six vibecoding dimensions plus production readiness, grounded in repo metrics rather than vibes.
+- **Grill** asks repo-specific questions, each with a recommended answer and a model-chosen input type; a coverage meter tracks how specified you are.
+- **Chat** has persistent cross-chat memory; inferred decisions, features, and stack choices arrive as suggestions you approve singly or in bulk.
+- **Plan → GitHub** pushes one issue per phase (stable markers, so re-pushes update instead of duplicating). Issue closes and file deletions happen only behind an exact, confirmed preview that is cryptographically bound to the project it was computed for.
+- **Voice capture**: dictate inbox ideas to an on-device Whisper model (`large-v3-turbo`, Metal) — live partial transcripts while you speak, ~3× realtime on an M4, nothing uploaded.
 
-Flip the **Code ↔ Learn** switch and the whole app becomes a study workspace. Add a subject (describe a goal, or upload material — text, Markdown, or PDF) and it scopes, proposes, then builds material that adapts as you go. Big documents are **fully covered**: uploads are split into structure-aware sections, the study plan is proposed per section (with live progress), and every module's notes/cards/quiz are grounded on the exact part of the document they came from — no silent truncation. Flashcards run on a real **FSRS due queue** (due cards first, capped new cards, honest "nothing due until…" states):
+## Learning mode
+
+Flip the Code ↔ Learn switch and the whole app becomes a study workspace. Upload material (text, Markdown, PDF) or describe a goal; it grills you on scope *first*, proposes a study plan you edit, then generates notes, flashcards, and quizzes — and a tutor that answers from your actual documents.
 
 ```mermaid
 flowchart LR
-    N["📝 Scope<br/>(intake grill)"] --> M["🧩 Propose<br/>(editable module plan)"] --> S["📚 Study<br/>notes · flashcards · quiz · tutor"]
-    S -->|every answer + grade| P["📈 Learner profile"]
-    P -.->|adapts difficulty & pacing| S
+    N["Scope (intake grill)"] --> M["Propose (editable plan)"] --> S["Study: notes · cards · quiz · tutor"]
+    S -->|every answer & grade| P["Learner profile"]
+    P -.->|pitches difficulty| S
 ```
 
-It **grills you on scope first** (never teaching before it understands the goal), then **generatively proposes** which modules to build, then generates the material you kept — and a built-in **tutor** answers questions at your level.
+Three things make it more than a flashcard app:
 
-> [!NOTE]
-> **Evidence-based, not "learning styles."** A `/deep-research` pass (25/25 claims verified) confirmed the popular "match instruction to a VARK learning style" idea is scientifically debunked (a negligible **d≈0.04** causal effect). So Learning mode adapts on what actually works: **retrieval practice** (quizzes + flashcards beat re-reading), **spaced repetition** (FSRS, via the `rs-fsrs` engine), and a per-skill **mastery estimate** (Bayesian Knowledge Tracing). The model is handed only a **bounded, numbers-only learner profile** (accuracy, pace, per-skill mastery) — never a personality label — and uses it to pitch difficulty and target weak skills. All of it stays in local SQLite.
+1. **Full-document coverage.** Big uploads are split into structure-aware sections; the plan is proposed per section and every module's material is grounded on the exact part of the document it came from. Nothing is silently truncated.
+2. **Grounded answers.** Documents are indexed twice — SQLite FTS5 keywords and local `nomic-embed-text` vectors (Ollama) — fused with reciprocal-rank fusion. The tutor cites its sources as `[n]`, says plainly when your materials don't cover something, and touches the web only behind a per-subject opt-in with a visible "includes web results" badge. The common path adds zero extra model calls.
+3. **Evidence-based adaptation.** No "learning styles" (the research is unambiguous: matching instruction to VARK styles has a negligible effect). Instead: retrieval practice, FSRS spaced repetition with a real due queue, Bayesian Knowledge Tracing per skill — and an [adaptive profile](#the-adaptive-profile) built from what you measurably do.
+
+## The adaptive profile
+
+The app maintains two Markdown files you can open, edit, and diff — `learner-profile.md` and `review-preferences.md`. Measured facts (quiz accuracy, flashcard lapses, suggestion verdicts, grill answer depth) are aggregated with plain SQL at zero model cost; once a session, a single gated haiku-tier call rewrites a capped, evidence-cited *Observations* section. Excerpts ride quietly into the tutor, the generators, and the review prompts. Your notes section is never auto-edited — proven by a test that rewrites the file 100 times — and one Settings toggle turns the whole system off.
 
 ## Architecture
 
-The frontend is "pixels + intent"; all privileged work — the filesystem, the GitHub network, spawning `claude` — happens in Rust behind named Tauri commands. A single mutex-guarded SQLite connection serializes all state; background model runs stream progress over events and are panic-guarded.
+The frontend is pixels and intent; everything privileged — filesystem, GitHub, spawning `claude` — happens in Rust behind named Tauri commands.
 
 ```mermaid
 flowchart LR
-    subgraph FE["Frontend · React + TS + Tailwind (webview)"]
-        UI["Panes and nav"]
-        ZS["Zustand stores"]
+    subgraph FE["React + TS (webview)"]
+        UI["Panes"] <--> ZS["Zustand stores"]
     end
-    subgraph BE["Backend · Rust (Tauri commands)"]
+    subgraph BE["Rust (Tauri commands)"]
         SQL[("SQLite")]
         MP["ModelProvider"]
+        EMB["Embedder"]
+        WSP["Whisper"]
         GHC["GitHub client"]
     end
-    UI <--> ZS
-    ZS -->|"invoke()"| BE
-    MP -.->|"claude -p · read-only tools"| CC["Claude Code"]
+    ZS -->|invoke| BE
+    MP -.->|"claude -p · read-only tools"| CC["Claude Code CLI"]
+    EMB -.->|/api/embed| OL["Ollama (local)"]
     GHC -.-> GH[("GitHub")]
-    BE --> SQL
 ```
-
-## Tech stack
 
 | Layer | Choice |
 |---|---|
-| Shell | **Tauri 2** — one signed, notarized native `.app` |
-| Backend | **Rust** — owns SQLite, the GitHub client, the model layer, and every write/commit |
-| Frontend | **React 19 + TypeScript + Tailwind v4**, lightweight **Zustand** state |
-| Database | **embedded SQLite** via `rusqlite` (bundled — no system dependency) |
-| Model | **Claude Code** via `claude -p` (stream-json) behind a `ModelProvider` interface |
-| Learning engine | **`rs-fsrs`** (FSRS spaced repetition) + an in-house Rust **Bayesian Knowledge Tracing** mastery model + **`pdf-extract`** (PDF upload ingest) + **react-markdown** (notes/tutor) |
-| Study RAG | **SQLite FTS5** (bundled, no new deps) + **Ollama `nomic-embed-text`** local embeddings + brute-force cosine + RRF fusion — design from NirDiamant's RAG_Techniques ("RAG Made Simple") |
-| Voice capture | **`whisper-rs`** (whisper.cpp, Metal) running `ggml-large-v3-turbo-q5_0` locally + **`cpal`** microphone capture — auto-downloaded (sha256-verified) on first use |
+| Shell | Tauri 2 — one native `.app`, ad-hoc signed (notarization documented in [`RELEASE.md`](./RELEASE.md)) |
+| Backend | Rust — owns SQLite, the GitHub client, the model layer, every write |
+| Frontend | React 19 + TypeScript + Tailwind v4, Zustand state |
+| Database | Embedded SQLite (`rusqlite`, bundled — FTS5 included) |
+| Model | Claude Code CLI (`claude -p`, stream-json) behind one `ModelProvider` trait — cancellable, hard-timeout, process-group killed |
+| Retrieval | FTS5 + local `nomic-embed-text` via Ollama, RRF fusion, brute-force cosine (right-sized for hundreds of chunks per subject) |
+| Voice | `whisper-rs` (whisper.cpp, Metal) + `cpal` capture; model auto-downloaded and sha256-verified on first use |
+| Learning engine | `rs-fsrs` spaced repetition + in-house Bayesian Knowledge Tracing |
 
-## Security & trust boundaries
+## Security model
 
-- **Read-only model** — planning/analysis pass only read/search tools (`Read, Grep, Glob, WebSearch, WebFetch`), plus an explicit `--disallowedTools` list as defense in depth. No code path lets the model write or commit your repo.
-- **Secrets stay out of the tree** — the GitHub token lives only in the macOS Keychain; a `PreToolUse` git hook runs a deterministic secret scanner and blocks any commit that stages a credential (CI runs the same scan).
-- **Nothing silent** — inferred changes are pending suggestions you approve; GitHub deletions/closes happen only after a confirmed, exact preview.
-- **Hardened inputs** — prompt context is fenced as untrusted data (backtick-delimited + neutralized, length-bounded); clone scanning refuses symlinks that escape the clone; GitHub URLs are HTTPS/SSH-only; the HTTP client has connect/overall timeouts.
+- **Read-only model, by construction** — one allow-list (`Read, Grep, Glob`, plus web only where explicitly intended) and a `--disallowedTools` denial as defense in depth. The retrieval-grounded tutor path provably never receives web tools (capture-tested).
+- **Secrets** — the GitHub token lives in the macOS Keychain only; a pre-commit hook and CI both run a deterministic secret scanner.
+- **Nothing silent** — model-inferred changes are pending suggestions; GitHub deletions/closes execute only an exact confirmed preview, which the backend rejects if it was computed for a different project.
+- **Untrusted input is fenced** — repo text, chat history, and document excerpts enter prompts as delimited data, never as instructions.
 
-See [`SECURITY.md`](./SECURITY.md) for the full trust model and dependency audit.
+The full trust model, including the deliberate decision to treat *imported* repos as trusted input, is in [`SECURITY.md`](./SECURITY.md).
 
-## Quality — how it was built
+## How it was built
 
-Built one phase at a time, each phase verified against its "Done when" checks before the next began, and each followed by a **5-angle review** (two subagents per angle) with a critical/high fix pass.
+The interesting part: this app was built the way it tells you to build — phased plan, one phase at a time, "done when" checks, with the model read-only the whole way. The history is unusually legible:
 
-After the 14th phase, a **5-round multi-agent council finale** hardened the codebase: each round dispatched **50 analyst subagents** → three specialist councils (correctness/security/data-integrity · product/UX/accessibility · architecture/maintainability/testing) → a **grand council** that picked bounded, test-backed, cross-council improvements and discarded the false positives. ~34 improvements shipped across the five rounds (CSP, symlink-escape closure, HTTP timeouts, crash-safe WAL + busy-timeout, prompt-injection hardening, gate poison-recovery, a full WCAG-AA accessibility pass, and more).
+- **Phases 1–14** built it; a five-round multi-agent council review hardened it (~34 fixes: CSP, symlink-escape closure, prompt-injection fencing, a WCAG-AA pass).
+- A **55-agent audit** then found 52 verified bugs — every finding adversarially checked against the code, zero refuted ([`.planning/AUDIT-2026-06-09.md`](./.planning/AUDIT-2026-06-09.md)).
+- **Phases 15–21** fixed all 52 and added the voice, profile, and RAG systems. Every fix carries a regression test that fails on the old code, and a CI contract suite now statically cross-checks every frontend `invoke()` against the registered Rust commands — the exact bug class that let "Delete subject" ship dead for weeks.
 
-- ✅ **124 backend tests** (`cargo test --lib`) + **86 frontend tests** (Vitest) — all green.
-- ✅ Every feature verified against rendered UI screenshots (a headless Playwright harness renders each pane with sample data), reviewed by a subagent before each phase shipped.
-- ✅ CI on pinned `macos-15`: secrets gate → frontend build/test → `cargo test` → `cargo build`.
-
-## Roadmap
-
-All 14 original build phases are complete, and a follow-up **bug-fix & feature overhaul** (phases A–H) added Learning mode, the Easy↔Technical toggle, persistent chat memory, generative grill inputs, the Understand redesign, and the design export. The project is feature-complete for v0.1 and in continuous-improvement mode.
+Current suites: **159 Rust + 103 frontend tests**, green, on every push.
 
 <details>
-<summary><b>Full 14-phase build roadmap</b></summary>
+<summary><b>Full phase history (1–21 + the A–H overhaul)</b></summary>
 
-| # | Phase | Status |
-|---|-------|--------|
-| 1 | Project scaffold & app shell | ✅ Done |
-| 2 | Model provider & Claude availability | ✅ Done |
-| 3 | Projects & GitHub connect | ✅ Done |
-| 4 | Repo analysis & cold start | ✅ Done |
-| 5 | Assessment engine & State pane | ✅ Done |
-| 6 | The Understand hub | ✅ Done |
-| 7 | Grill-me cards & detail coverage | ✅ Done |
-| 8 | Two-way chat & structured proposals | ✅ Done |
-| 9 | Decisions, suggestions & stack panes | ✅ Done |
-| 10 | Feature inbox & plan regeneration | ✅ Done |
-| 11 | GitHub sync out | ✅ Done |
-| 12 | Visualization, first-run & polish | ✅ Done |
-| 13 | Production hardening | ✅ Done |
-| 14 | Learning-mode entry point | ✅ Done (now a full mode — below) |
+| # | Phase |
+|---|-------|
+| 1–14 | Scaffold → model provider → GitHub → analysis → assessment → Understand → Grill → Chat → Decisions/Stack → Inbox → Sync → Visualization → Hardening → Learning entry |
+| A–H | Visual fixes · Easy↔Technical toggle · Plan readability · Persistent chat memory · Generative grill inputs · Understand redesign · **Learning mode** (FSRS/BKT engine) · Design export |
+| 15 | Destructive-action safety + the IPC contract suite |
+| 16 | Unfreeze & control — cancellable model layer, timeouts, Stop/Cancel everywhere |
+| 17 | Settings truth — provider honesty, FSRS due queue, transactional saves & migrations |
+| 18 | Polish sweep — races, a11y, project rename/delete, dead code removal |
+| 19 | Local Whisper voice capture + full-document chunked ingest |
+| 20 | Adaptive self-learning profile (researched against Honcho/mem0/Letta — servers rejected, patterns borrowed) |
+| 21 | Study-material RAG (NirDiamant's RAG_Techniques subset, right-sized + eval floor in CI) |
+
+Per-phase goals, tasks, and recorded deviations live in [`.planning/phases/`](./.planning/phases/). A new-engineer [`HANDOFF.md`](./HANDOFF.md) covers architecture and schema in depth.
 
 </details>
-
-<details>
-<summary><b>Bug-fix &amp; feature overhaul (phases A–H)</b></summary>
-
-| # | Phase | Status |
-|---|-------|--------|
-| A | Visual fixes + Stack "Why?" bug | ✅ Done |
-| B | Easy↔Technical global toggle | ✅ Done |
-| C | Plan readability (Markdown + collapsible phases) | ✅ Done |
-| D | Persistent chat history + cross-chat memory | ✅ Done |
-| E | Grill: model-generated input per question | ✅ Done |
-| F | Understand redesign (filters + inline per-card chat) | ✅ Done |
-| G | **Learning mode** (intake → propose → notes/flashcards/quiz/tutor + FSRS/BKT adaptive engine) | ✅ Done |
-| H | Design export (self-contained snapshot to Desktop) | ✅ Done |
-
-</details>
-
-A new-engineer [`HANDOFF.md`](./HANDOFF.md) covers the architecture, schema, dev process, and the full change history in depth.
 
 ## Install & run
 
-**Prerequisites:** macOS, [Claude Code](https://claude.com/claude-code) installed and signed in (the app drives the `claude` CLI), and for building from source: **Rust** (stable) + **Node 20+** with Xcode Command Line Tools (`xcode-select --install`).
-
-### Build the app
+**Prerequisites:** macOS 11+, [Claude Code](https://claude.com/claude-code) installed and signed in. Optional: [Ollama](https://ollama.com) with `nomic-embed-text` for semantic study search (keyword search works without it).
 
 ```bash
 npm install
-npm run tauri build -- --bundles app   # produces "Review Helper.app" under src-tauri/target/release/bundle/macos/
+npm run tauri build -- --bundles app   # → src-tauri/target/release/bundle/macos/Review Helper.app
 ```
 
-The first build is slow (it compiles Tauri + SQLite from source); later builds are incremental. The bundle is ad-hoc signed — on first launch, right-click → **Open** to clear Gatekeeper. (Full Developer-ID notarization is documented in [`RELEASE.md`](./RELEASE.md) and needs an Apple signing identity.)
-
-### Develop
+First build is slow (Tauri + SQLite + whisper.cpp compile from source). The bundle is ad-hoc signed — right-click → Open on first launch. If Claude ever shows as unavailable in the app, the banner's **Connect in Terminal** button opens a terminal with `claude` already running to walk you through login.
 
 ```bash
-npm run tauri dev                                  # run the app (native window) with HMR
-npm test                                           # frontend tests (Vitest + Testing Library)
-cargo test --manifest-path src-tauri/Cargo.toml --lib   # Rust tests (model, plan, sync, schema, security, learning)
-npm run build                                       # production frontend build
-npm run export:design                               # write a self-contained design snapshot (every screen, all 8 themes) to your Desktop
+npm run tauri dev        # develop with HMR
+npm test                 # frontend tests
+cargo test --manifest-path src-tauri/Cargo.toml --lib   # backend tests
+npm run export:design    # self-contained HTML snapshot of every screen, all 8 themes
 ```
 
 ---
 
 <div align="center">
-<sub><b>Review Helper</b> · vibecode the right way</sub>
+<sub><b>Review Helper</b> · plan it right, then build it · learn it right, then remember it</sub>
 </div>
