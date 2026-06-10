@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-06-09)
 
 ## Corpus Check
-- 259 files · ~158,354 words
+- 259 files · ~158,485 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -393,7 +393,7 @@ Nodes (12): aggregates_attempts_and_renders_a_bounded_prompt(), db(), ProfileSna
 
 ### Community 51 - "Community 51"
 Cohesion: 0.15
-Nodes (13): commands, description, identifier, commands, description, identifier, commands, description (+5 more)
+Nodes (13): commands, description, identifier, commands, description, identifier, deny, commands (+5 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.15
@@ -521,11 +521,11 @@ Nodes (4): commands, description, identifier, allow-items
 
 ### Community 83 - "Community 83"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-register-listener
+Nodes (4): commands, description, identifier, allow-name
 
 ### Community 84 - "Community 84"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-remove
+Nodes (4): commands, description, identifier, allow-register-listener
 
 ### Community 85 - "Community 85"
 Cohesion: 0.50
