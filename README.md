@@ -44,7 +44,7 @@ It is one self-contained `.app`: Rust backend, embedded SQLite, React UI. No ser
   </tr>
   <tr>
     <td><img src="./docs/screenshots/understand.png" alt="Understand hub"/><br/><sub><b>Understand</b> — a self-extending concept-card library; every card opens an inline chat.</sub></td>
-    <td><img src="./docs/screenshots/learning.png" alt="Learning mode"/><br/><sub><b>Learning mode</b> — the same engine pointed at anything you want to study.</sub></td>
+    <td><img src="./docs/screenshots/learning.png" alt="Learning mode"/><br/><sub><b>Learning mode</b> — the tutor, answering at your level from your own materials.</sub></td>
   </tr>
 </table>
 
