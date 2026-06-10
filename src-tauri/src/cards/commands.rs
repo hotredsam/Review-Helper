@@ -41,7 +41,7 @@ pub fn card_get(db: State<'_, Db>, term: String) -> Result<Option<Card>, String>
 /// When `project_id` is given (the Understand hub on a project), the card is
 /// associated with that project for the "This project" filter.
 #[tauri::command]
-pub fn card_explain(
+pub async fn card_explain(
     db: State<'_, Db>,
     gate: State<'_, CardGate>,
     term: String,
@@ -92,7 +92,11 @@ pub fn card_explain(
     };
 
     // Generate without holding the DB lock across the model call.
-    let content = generate_card(&term)?;
+    let run_key = format!("card:{}", term.to_lowercase());
+    let token = crate::model::registry::register(&run_key);
+    let content = generate_card(&term, &token);
+    crate::model::registry::finish(&run_key);
+    let content = content?;
     let source = match existing_source.as_deref() {
         Some("detected") => "detected",
         _ => "generated",
@@ -146,17 +150,17 @@ pub fn card_project_terms(db: State<'_, Db>, project_id: i64) -> Result<Vec<Stri
 
 /// Fix the spelling/grammar of a typed term before it's explained + carded.
 #[tauri::command]
-pub fn card_clean_term(term: String) -> Result<String, String> {
+pub async fn card_clean_term(term: String) -> Result<String, String> {
     let t = term.trim();
     if t.is_empty() {
         return Err("Enter a term first.".into());
     }
-    super::study::clean_term(t)
+    super::study::clean_term(t, &crate::model::CancelToken::new())
 }
 
 /// 5–10 starter questions for a card; cached after the first generation.
 #[tauri::command]
-pub fn card_premade_questions(db: State<'_, Db>, term: String) -> Result<Vec<String>, String> {
+pub async fn card_premade_questions(db: State<'_, Db>, term: String) -> Result<Vec<String>, String> {
     let term = term.trim().to_string();
     {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -165,7 +169,7 @@ pub fn card_premade_questions(db: State<'_, Db>, term: String) -> Result<Vec<Str
             return Ok(cached);
         }
     }
-    let qs = super::study::generate_questions(&term)?; // model call, no lock held
+    let qs = super::study::generate_questions(&term, &crate::model::CancelToken::new())?; // model call, no lock held
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     super::study::save_questions(&conn, &term, &qs)?;
     Ok(qs)
@@ -184,7 +188,7 @@ pub fn card_chat_history(
 
 /// Send a message in a card's inline chat; persists both sides, returns the reply.
 #[tauri::command]
-pub fn card_chat_send(
+pub async fn card_chat_send(
     db: State<'_, Db>,
     project_id: i64,
     term: String,
@@ -208,7 +212,11 @@ pub fn card_chat_send(
         super::study::chat_add(&conn, project_id, &term, "user", &message)?;
         (what, why, history)
     };
-    let reply = super::study::chat_reply(&term, &what, &why, &history, &message)?;
+    let run_key = format!("cardchat:{project_id}:{}", term.to_lowercase());
+    let token = crate::model::registry::register(&run_key);
+    let reply = super::study::chat_reply(&term, &what, &why, &history, &message, &token);
+    crate::model::registry::finish(&run_key);
+    let reply = reply?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     super::study::chat_add(&conn, project_id, &term, "assistant", &reply)?;
     Ok(reply)

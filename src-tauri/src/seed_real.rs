@@ -40,7 +40,7 @@ fn gh_token() -> String {
 fn run_model(req: &ModelRequest) -> Option<String> {
     let mut text = None;
     let mut failure: Option<String> = None;
-    ClaudeCodeProvider::new().run(req, &mut |e: ModelEvent| match e {
+    ClaudeCodeProvider::new().run(req, &crate::model::CancelToken::new(), &mut |e: ModelEvent| match e {
         ModelEvent::Completed { text: t, .. } => text = Some(t),
         ModelEvent::Unavailable { detail, .. } | ModelEvent::Failed { detail } => {
             failure = Some(detail)

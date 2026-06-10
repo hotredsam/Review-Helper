@@ -106,16 +106,20 @@ fn run_grill(app: AppHandle, project_id: i64, depth: i64) {
         req.cwd = Some(cp);
     }
 
+    let run_key = format!("grill:{project_id}");
+    let token = crate::model::registry::register(&run_key);
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;
-    ClaudeCodeProvider::new().run(&req, &mut |event: ModelEvent| match event {
+    ClaudeCodeProvider::new().run(&req, &token, &mut |event: ModelEvent| match event {
         ModelEvent::ToolUse { name } => emit(GrillEvent::Tool { project_id, name }),
         ModelEvent::Completed { text, .. } => final_text = Some(text),
         ModelEvent::Unavailable { detail, .. } | ModelEvent::Failed { detail } => {
             failure = Some(detail)
         }
+        ModelEvent::Stopped => failure = Some("Stopped.".into()),
         _ => {}
     });
+    crate::model::registry::finish(&run_key);
 
     if let Some(detail) = failure {
         return emit(GrillEvent::Failed { project_id, detail });
@@ -231,7 +235,7 @@ mod tests {
         req.model = Some("sonnet".into());
 
         let mut text = None;
-        ClaudeCodeProvider::new().run(&req, &mut |e: ModelEvent| {
+        ClaudeCodeProvider::new().run(&req, &crate::model::CancelToken::new(), &mut |e: ModelEvent| {
             if let ModelEvent::Completed { text: t, .. } = e {
                 text = Some(t);
             }

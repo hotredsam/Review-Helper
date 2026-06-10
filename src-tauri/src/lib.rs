@@ -9,6 +9,7 @@ mod chat;
 pub mod context;
 mod decisions;
 mod features;
+mod config;
 mod db;
 mod github;
 mod grill;
@@ -75,6 +76,7 @@ pub fn run() {
             app_info,
             model::commands::model_run,
             model::commands::model_status,
+            model::commands::model_stop,
             settings::get_model_config,
             settings::set_model_config,
             github::commands::github_status,

@@ -34,10 +34,20 @@ pub fn model_run(app: AppHandle, db: State<'_, Db>, prompt: String, session_id: 
         let provider = provider_for(&config);
         let mut req = ModelRequest::planning(prompt);
         req.session_id = session_id;
-        provider.run(&req, &mut |event: ModelEvent| {
+        let token = super::registry::register("console");
+        provider.run(&req, &token, &mut |event: ModelEvent| {
             let _ = app.emit("model-event", &event);
         });
+        super::registry::finish("console");
     });
+}
+
+/// Cancel an in-flight model run by its registry key ("chat:42", "tutor:7",
+/// "learning:13", "plan:3", "assess:3", "console"). Returns whether a run was
+/// found — false simply means it already finished.
+#[tauri::command]
+pub fn model_stop(run_key: String) -> bool {
+    super::registry::stop(&run_key)
 }
 
 /// Whether the active provider is usable, with enough debug detail (the probe
@@ -135,7 +145,7 @@ mod tests {
         };
         let provider = provider_for(&config);
         let mut events = Vec::new();
-        provider.run(&ModelRequest::planning("hi"), &mut |e| events.push(e));
+        provider.run(&ModelRequest::planning("hi"), &crate::model::CancelToken::new(), &mut |e| events.push(e));
         assert_eq!(events.len(), 1);
         assert!(matches!(events[0], ModelEvent::Unavailable { .. }));
     }

@@ -8,6 +8,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use super::gen::{extract_json, run_once};
+use crate::model::CancelToken;
 use super::store::SubjectDetail;
 use crate::context::fence_safe;
 
@@ -75,8 +76,8 @@ pub fn notes_get(conn: &Connection, module_id: i64) -> Result<Option<String>, St
     .map_err(|e| e.to_string())
 }
 
-pub(super) fn fetch_notes(subject: &SubjectDetail, m: &ModuleRow) -> Result<String, String> {
-    let body = run_once(ground(subject, m), NOTES_SYSTEM)?;
+pub(super) fn fetch_notes(subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<String, String> {
+    let body = run_once(ground(subject, m), NOTES_SYSTEM, cancel)?;
     let body = body.trim();
     if body.is_empty() {
         return Err("The notes came back empty.".into());
@@ -127,8 +128,8 @@ pub fn flashcards_list(conn: &Connection, module_id: i64) -> Result<Vec<Flashcar
     .map_err(|e| e.to_string())
 }
 
-pub(super) fn fetch_flashcards(subject: &SubjectDetail, m: &ModuleRow) -> Result<Vec<(String, String)>, String> {
-    let text = run_once(ground(subject, m), FLASH_SYSTEM)?;
+pub(super) fn fetch_flashcards(subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<Vec<(String, String)>, String> {
+    let text = run_once(ground(subject, m), FLASH_SYSTEM, cancel)?;
     let json = extract_json(&text)?;
     let set: CardSet = serde_json::from_str(json).map_err(|_| "The flashcards were malformed.".to_string())?;
     let cards: Vec<(String, String)> = set
@@ -204,8 +205,8 @@ pub fn quiz_list(conn: &Connection, module_id: i64) -> Result<Vec<QuizQuestion>,
         .collect())
 }
 
-pub(super) fn fetch_quiz(subject: &SubjectDetail, m: &ModuleRow) -> Result<Vec<ParsedQuiz>, String> {
-    let text = run_once(ground(subject, m), QUIZ_SYSTEM)?;
+pub(super) fn fetch_quiz(subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<Vec<ParsedQuiz>, String> {
+    let text = run_once(ground(subject, m), QUIZ_SYSTEM, cancel)?;
     let json = extract_json(&text)?;
     let set: QuizSet = serde_json::from_str(json).map_err(|_| "The quiz was malformed.".to_string())?;
     let questions: Vec<ParsedQuiz> = set

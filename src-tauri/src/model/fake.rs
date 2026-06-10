@@ -1,7 +1,7 @@
 //! A scripted provider for tests and offline UI work: it emits a fixed sequence
 //! of events without touching any subprocess.
 
-use super::{ModelEvent, ModelProvider, ModelRequest};
+use super::{CancelToken, ModelEvent, ModelProvider, ModelRequest};
 
 pub struct FakeProvider {
     script: Vec<ModelEvent>,
@@ -34,8 +34,12 @@ impl FakeProvider {
 }
 
 impl ModelProvider for FakeProvider {
-    fn run(&self, _req: &ModelRequest, sink: &mut dyn FnMut(ModelEvent)) {
+    fn run(&self, _req: &ModelRequest, cancel: &CancelToken, sink: &mut dyn FnMut(ModelEvent)) {
         for event in &self.script {
+            if cancel.is_cancelled() {
+                sink(ModelEvent::Stopped);
+                return;
+            }
             sink(event.clone());
         }
     }
@@ -48,7 +52,7 @@ mod tests {
 
     fn collect(provider: &dyn ModelProvider, req: &ModelRequest) -> Vec<ModelEvent> {
         let mut events = Vec::new();
-        provider.run(req, &mut |e| events.push(e));
+        provider.run(req, &CancelToken::new(), &mut |e| events.push(e));
         events
     }
 

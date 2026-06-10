@@ -11,6 +11,24 @@ pub mod claude;
 pub mod commands;
 pub mod fake;
 pub mod local;
+pub mod registry;
+
+/// Cooperative cancellation for a model run. Cloned into the run registry so a
+/// Stop button can kill the child process mid-stream.
+#[derive(Clone, Debug, Default)]
+pub struct CancelToken(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl CancelToken {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn cancel(&self) {
+        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
 
 /// Read/search tools a planning call may use. Deliberately excludes
 /// Bash/Edit/Write/NotebookEdit — the model never mutates source.
@@ -111,6 +129,9 @@ pub enum ModelEvent {
     },
     /// Terminal: the run started but errored mid-stream.
     Failed { detail: String },
+    /// Terminal: the user stopped the run (or a newer run replaced it). Callers
+    /// decide what to do with any partial text they accumulated.
+    Stopped,
 }
 
 impl ModelEvent {
@@ -120,6 +141,7 @@ impl ModelEvent {
             ModelEvent::Completed { .. }
                 | ModelEvent::Unavailable { .. }
                 | ModelEvent::Failed { .. }
+                | ModelEvent::Stopped
         )
     }
 }
@@ -127,7 +149,8 @@ impl ModelEvent {
 /// The single entry point for all model use. Implementations stream
 /// `ModelEvent`s to `sink` in order and return once a terminal event has been
 /// emitted. `run` blocks; callers spawn it on a background thread and forward
-/// each event to the frontend.
+/// each event to the frontend. Implementations must honor `cancel` (kill the
+/// child, emit `Stopped`) and enforce the `config::MODEL_TIMEOUT_SECS` ceiling.
 pub trait ModelProvider: Send + Sync {
-    fn run(&self, req: &ModelRequest, sink: &mut dyn FnMut(ModelEvent));
+    fn run(&self, req: &ModelRequest, cancel: &CancelToken, sink: &mut dyn FnMut(ModelEvent));
 }

@@ -23,6 +23,9 @@ pub enum ChatEvent {
     Tool { project_id: i64, transcript_id: i64, name: String },
     Done { project_id: i64, transcript_id: i64, reply: String, suggestions: usize },
     Failed { project_id: i64, transcript_id: i64, detail: String },
+    /// The user pressed Stop. `partial` is whatever streamed before the kill —
+    /// persisted to the transcript when non-empty, so reload matches the screen.
+    Stopped { project_id: i64, transcript_id: i64, partial: String },
 }
 
 /// Start a fresh chat for a project; returns the new transcript id.
@@ -125,16 +128,36 @@ fn run_chat(
         req.cwd = Some(cp);
     }
 
+    let run_key = format!("chat:{transcript_id}");
+    let token = crate::model::registry::register(&run_key);
+
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;
-    provider_for(&config).run(&req, &mut |event: ModelEvent| match event {
-        ModelEvent::AssistantText { text } => emit(ChatEvent::Token { project_id, transcript_id, text }),
+    let mut streamed = String::new();
+    let mut stopped = false;
+    provider_for(&config).run(&req, &token, &mut |event: ModelEvent| match event {
+        ModelEvent::AssistantText { text } => {
+            streamed.push_str(&text);
+            emit(ChatEvent::Token { project_id, transcript_id, text });
+        }
         ModelEvent::ToolUse { name } => emit(ChatEvent::Tool { project_id, transcript_id, name }),
         ModelEvent::Completed { text, .. } => final_text = Some(text),
         ModelEvent::Unavailable { detail, .. } | ModelEvent::Failed { detail } => failure = Some(detail),
+        ModelEvent::Stopped => stopped = true,
         _ => {}
     });
+    crate::model::registry::finish(&run_key);
 
+    if stopped {
+        // Keep what streamed (the user chose to stop, not to discard) and persist
+        // it so the transcript on reload matches what was on screen.
+        if !streamed.trim().is_empty() {
+            if let Ok(conn) = app.state::<Db>().0.lock() {
+                let _ = store::add_message(&conn, transcript_id, "assistant", &streamed);
+            }
+        }
+        return emit(ChatEvent::Stopped { project_id, transcript_id, partial: streamed });
+    }
     if let Some(detail) = failure {
         return emit(ChatEvent::Failed { project_id, transcript_id, detail });
     }

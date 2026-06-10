@@ -29,7 +29,9 @@ pub struct LearningGate(pub Mutex<HashMap<i64, Arc<Mutex<()>>>>);
 
 impl LearningGate {
     pub fn for_subject(&self, subject_id: i64) -> Arc<Mutex<()>> {
-        let mut map = self.0.lock().unwrap();
+        // Recover from poisoning: the map carries no invariant, and a panic in
+        // one generation must not brick the gate for every later one.
+        let mut map = self.0.lock().unwrap_or_else(|e| e.into_inner());
         map.entry(subject_id).or_default().clone()
     }
 }
@@ -82,7 +84,7 @@ pub fn subject_delete(db: State<'_, Db>, subject_id: i64) -> Result<(), String> 
 /// WITHOUT the lock (so it never blocks the rest of the app), serialized per
 /// subject by the gate so a double-click can't double-generate.
 #[tauri::command]
-pub fn learning_intake(
+pub async fn learning_intake(
     db: State<'_, Db>,
     gate: State<'_, LearningGate>,
     subject_id: i64,
@@ -108,7 +110,11 @@ pub fn learning_intake(
         }
     }
 
-    let questions = intake::fetch_questions(&subject)?; // model call, no DB lock held
+    let run_key = format!("learning:{subject_id}");
+    let token = crate::model::registry::register(&run_key);
+    let questions = intake::fetch_questions(&subject, &token); // model call, no DB lock held
+    crate::model::registry::finish(&run_key);
+    let questions = questions?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     intake::save(&conn, subject_id, &questions)?;
     intake::list(&conn, subject_id)
@@ -125,7 +131,7 @@ pub fn learning_intake_answer(db: State<'_, Db>, intake_id: i64, answer: String)
 /// it and advancing the subject to the `proposed` stage. Same lock discipline as
 /// intake: cache-check + gate + lock-free model call + save.
 #[tauri::command]
-pub fn learning_propose(
+pub async fn learning_propose(
     db: State<'_, Db>,
     gate: State<'_, LearningGate>,
     subject_id: i64,
@@ -152,7 +158,11 @@ pub fn learning_propose(
         }
     }
 
-    let modules = propose::fetch_modules(&subject, &intake)?; // model call, no DB lock
+    let run_key = format!("learning:{subject_id}");
+    let token = crate::model::registry::register(&run_key);
+    let modules = propose::fetch_modules(&subject, &intake, &token); // model call, no DB lock
+    crate::model::registry::finish(&run_key);
+    let modules = modules?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     propose::save_modules(&conn, subject_id, &modules)?;
     store::set_stage(&conn, subject_id, "proposed")?;
@@ -193,14 +203,18 @@ fn module_grounding(db: &State<'_, Db>, module_id: i64) -> Result<(SubjectDetail
 /// A module's notes, generated + cached on first open. Same lock discipline as
 /// the other generators (cache + per-module gate + lock-free model call + save).
 #[tauri::command]
-pub fn learning_notes(db: State<'_, Db>, gate: State<'_, LearningGate>, module_id: i64) -> Result<String, String> {
+pub async fn learning_notes(db: State<'_, Db>, gate: State<'_, LearningGate>, module_id: i64) -> Result<String, String> {
     {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         if let Some(body) = materials::notes_get(&conn, module_id)? {
             return Ok(body);
         }
     }
-    let glock = gate.for_subject(module_id);
+    // Load the module first so the gate keys on its SUBJECT — the documented
+    // per-subject serialization (gating on module_id let two modules of one
+    // subject generate concurrently).
+    let (subject, m) = module_grounding(&db, module_id)?;
+    let glock = gate.for_subject(m.subject_id);
     let _g = glock.lock().unwrap_or_else(|e| e.into_inner());
     {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -208,8 +222,11 @@ pub fn learning_notes(db: State<'_, Db>, gate: State<'_, LearningGate>, module_i
             return Ok(body);
         }
     }
-    let (subject, m) = module_grounding(&db, module_id)?;
-    let body = materials::fetch_notes(&subject, &m)?; // model call, no DB lock
+    let run_key = format!("learning:{module_id}");
+    let token = crate::model::registry::register(&run_key);
+    let body = materials::fetch_notes(&subject, &m, &token); // model call, no DB lock
+    crate::model::registry::finish(&run_key);
+    let body = body?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     materials::notes_save(&conn, module_id, &body)?;
     materials::set_module_status(&conn, module_id, "ready")?;
@@ -218,16 +235,7 @@ pub fn learning_notes(db: State<'_, Db>, gate: State<'_, LearningGate>, module_i
 
 /// A module's flashcards, generated + cached on first open.
 #[tauri::command]
-pub fn learning_flashcards(db: State<'_, Db>, gate: State<'_, LearningGate>, module_id: i64) -> Result<Vec<Flashcard>, String> {
-    {
-        let conn = db.0.lock().map_err(|e| e.to_string())?;
-        let existing = materials::flashcards_list(&conn, module_id)?;
-        if !existing.is_empty() {
-            return Ok(existing);
-        }
-    }
-    let glock = gate.for_subject(module_id);
-    let _g = glock.lock().unwrap_or_else(|e| e.into_inner());
+pub async fn learning_flashcards(db: State<'_, Db>, gate: State<'_, LearningGate>, module_id: i64) -> Result<Vec<Flashcard>, String> {
     {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         let existing = materials::flashcards_list(&conn, module_id)?;
@@ -236,7 +244,20 @@ pub fn learning_flashcards(db: State<'_, Db>, gate: State<'_, LearningGate>, mod
         }
     }
     let (subject, m) = module_grounding(&db, module_id)?;
-    let cards = materials::fetch_flashcards(&subject, &m)?; // model call, no DB lock
+    let glock = gate.for_subject(m.subject_id);
+    let _g = glock.lock().unwrap_or_else(|e| e.into_inner());
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let existing = materials::flashcards_list(&conn, module_id)?;
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+    }
+    let run_key = format!("learning:{module_id}");
+    let token = crate::model::registry::register(&run_key);
+    let cards = materials::fetch_flashcards(&subject, &m, &token); // model call, no DB lock
+    crate::model::registry::finish(&run_key);
+    let cards = cards?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     materials::flashcards_save(&conn, module_id, m.subject_id, m.skill.as_deref().unwrap_or(""), &cards)?;
     materials::set_module_status(&conn, module_id, "ready")?;
@@ -245,16 +266,7 @@ pub fn learning_flashcards(db: State<'_, Db>, gate: State<'_, LearningGate>, mod
 
 /// A module's quiz questions, generated + cached on first open.
 #[tauri::command]
-pub fn learning_quiz(db: State<'_, Db>, gate: State<'_, LearningGate>, module_id: i64) -> Result<Vec<QuizQuestion>, String> {
-    {
-        let conn = db.0.lock().map_err(|e| e.to_string())?;
-        let existing = materials::quiz_list(&conn, module_id)?;
-        if !existing.is_empty() {
-            return Ok(existing);
-        }
-    }
-    let glock = gate.for_subject(module_id);
-    let _g = glock.lock().unwrap_or_else(|e| e.into_inner());
+pub async fn learning_quiz(db: State<'_, Db>, gate: State<'_, LearningGate>, module_id: i64) -> Result<Vec<QuizQuestion>, String> {
     {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         let existing = materials::quiz_list(&conn, module_id)?;
@@ -263,7 +275,20 @@ pub fn learning_quiz(db: State<'_, Db>, gate: State<'_, LearningGate>, module_id
         }
     }
     let (subject, m) = module_grounding(&db, module_id)?;
-    let questions = materials::fetch_quiz(&subject, &m)?; // model call, no DB lock
+    let glock = gate.for_subject(m.subject_id);
+    let _g = glock.lock().unwrap_or_else(|e| e.into_inner());
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let existing = materials::quiz_list(&conn, module_id)?;
+        if !existing.is_empty() {
+            return Ok(existing);
+        }
+    }
+    let run_key = format!("learning:{module_id}");
+    let token = crate::model::registry::register(&run_key);
+    let questions = materials::fetch_quiz(&subject, &m, &token); // model call, no DB lock
+    crate::model::registry::finish(&run_key);
+    let questions = questions?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     materials::quiz_save(&conn, module_id, m.subject_id, m.skill.as_deref().unwrap_or(""), &questions)?;
     materials::set_module_status(&conn, module_id, "ready")?;
@@ -344,7 +369,7 @@ pub fn learning_tutor_history(db: State<'_, Db>, subject_id: i64) -> Result<Vec<
 /// makes the model call WITHOUT the lock and persists the reply. The profile is
 /// numbers-only (no "learning style"); the model adapts difficulty from it.
 #[tauri::command]
-pub fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: String) -> Result<String, String> {
+pub async fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: String) -> Result<String, String> {
     let message = message.trim().to_string();
     if message.is_empty() {
         return Err("Type a message first.".into());
@@ -360,7 +385,11 @@ pub fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: String) 
         tutor::add(&conn, subject_id, "user", &message)?;
         (subject, profile_block, hist)
     };
-    let reply = tutor::reply(&subject, &profile_block, &hist, &message)?; // model call, no DB lock
+    let run_key = format!("tutor:{subject_id}");
+    let token = crate::model::registry::register(&run_key);
+    let reply = tutor::reply(&subject, &profile_block, &hist, &message, &token); // model call, no DB lock
+    crate::model::registry::finish(&run_key);
+    let reply = reply?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     tutor::add(&conn, subject_id, "assistant", &reply)?;
     Ok(reply)
@@ -371,7 +400,7 @@ pub fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: String) 
 /// Extract text from an uploaded PDF's bytes to seed a subject. Bounded + panic-
 /// safe; degrades to a clear "paste the text instead" error on failure.
 #[tauri::command]
-pub fn learning_extract_pdf(bytes: Vec<u8>) -> Result<String, String> {
+pub async fn learning_extract_pdf(bytes: Vec<u8>) -> Result<String, String> {
     if bytes.len() > 25_000_000 {
         return Err("That PDF is too large (max 25 MB). Paste the relevant text instead.".into());
     }

@@ -180,18 +180,19 @@ fn parse_gen_card(text: &str) -> Result<GenCard, String> {
 
 /// Generate a card's content for a term via the model (no DB access). Surfaces
 /// the real failure detail on the offline / unavailable / errored paths.
-pub(crate) fn generate_card(term: &str) -> Result<GenCard, String> {
+pub(crate) fn generate_card(term: &str, cancel: &crate::model::CancelToken) -> Result<GenCard, String> {
     use crate::model::claude::ClaudeCodeProvider;
     use crate::model::{ModelEvent, ModelProvider, ModelRequest};
     let mut req = ModelRequest::planning(format!("Explain this term as a card: {}", term.trim()));
     req.system_append = Some(CARD_SYSTEM.to_string());
     let mut text = None;
     let mut failure: Option<String> = None;
-    ClaudeCodeProvider::new().run(&req, &mut |e: ModelEvent| match e {
+    ClaudeCodeProvider::new().run(&req, cancel, &mut |e: ModelEvent| match e {
         ModelEvent::Completed { text: t, .. } => text = Some(t),
         ModelEvent::Unavailable { detail, .. } | ModelEvent::Failed { detail } => {
             failure = Some(detail)
         }
+        ModelEvent::Stopped => failure = Some("Stopped.".into()),
         _ => {}
     });
     if let Some(detail) = failure {
@@ -273,7 +274,7 @@ mod tests {
     #[test]
     #[ignore = "real model card generation; needs auth + uses credits. Run: cargo test -- --ignored"]
     fn real_card_generation() {
-        let card = generate_card("Bloom filter").unwrap();
+        let card = generate_card("Bloom filter", &crate::model::CancelToken::new()).unwrap();
         assert!(!card.what.trim().is_empty());
         let domains = [
             "architecture", "frontend", "backend", "pipes", "deployment", "business", "design",

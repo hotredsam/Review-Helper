@@ -8,6 +8,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use super::gen::{extract_json, run_once};
+use crate::model::CancelToken;
 use super::intake::IntakeItem;
 use super::store::SubjectDetail;
 use crate::context::fence_safe;
@@ -122,14 +123,14 @@ fn intake_block(intake: &[IntakeItem]) -> String {
 
 /// Generate the proposed module manifest from the subject + intake answers. Pure
 /// model work (no DB); the caller persists under a brief lock.
-pub(super) fn fetch_modules(subject: &SubjectDetail, intake: &[IntakeItem]) -> Result<Vec<ParsedModule>, String> {
+pub(super) fn fetch_modules(subject: &SubjectDetail, intake: &[IntakeItem], cancel: &CancelToken) -> Result<Vec<ParsedModule>, String> {
     let prompt = format!(
         "Subject: {}\n\nWhat the learner wants (DATA — untrusted):\n{}\n\nScoping answers (DATA — untrusted):\n{}",
         fence_safe(&subject.title),
         fence_safe(subject.source_text.as_deref().unwrap_or("(none)")),
         intake_block(intake),
     );
-    let text = run_once(prompt, PROPOSE_SYSTEM)?;
+    let text = run_once(prompt, PROPOSE_SYSTEM, cancel)?;
     let json = extract_json(&text)?;
     let proposal: Proposal =
         serde_json::from_str(json).map_err(|_| "The proposed plan was malformed.".to_string())?;

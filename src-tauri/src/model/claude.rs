@@ -6,10 +6,13 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::mpsc::RecvTimeoutError;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
-use super::{ModelEvent, ModelProvider, ModelRequest, UnavailableReason};
+use super::{CancelToken, ModelEvent, ModelProvider, ModelRequest, UnavailableReason};
 
 /// Tools that must never be available to the model — defense in depth alongside
 /// the read-only allow-list (which already omits them).
@@ -62,6 +65,7 @@ pub(crate) fn augmented_path() -> std::ffi::OsString {
 
 pub struct ClaudeCodeProvider {
     binary: String,
+    timeout: Duration,
 }
 
 impl Default for ClaudeCodeProvider {
@@ -70,6 +74,7 @@ impl Default for ClaudeCodeProvider {
             // Resolve to an absolute path so a Finder-launched app (minimal PATH)
             // still finds the CLI.
             binary: resolve_binary("claude"),
+            timeout: Duration::from_secs(crate::config::MODEL_TIMEOUT_SECS),
         }
     }
 }
@@ -83,6 +88,16 @@ impl ClaudeCodeProvider {
     pub fn with_binary(binary: impl Into<String>) -> Self {
         ClaudeCodeProvider {
             binary: binary.into(),
+            ..Self::default()
+        }
+    }
+
+    /// Override the hard timeout (tests use sub-second values).
+    #[cfg(test)]
+    pub fn with_binary_and_timeout(binary: impl Into<String>, timeout: Duration) -> Self {
+        ClaudeCodeProvider {
+            binary: binary.into(),
+            timeout,
         }
     }
 
@@ -123,12 +138,20 @@ impl ClaudeCodeProvider {
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        // Own process group, so kill() can take out the CLI *and* anything it
+        // spawned — otherwise grandchildren inherit our pipes and keep them
+        // open, and the reader threads (and credits) outlive the Stop button.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
         cmd
     }
 }
 
 impl ModelProvider for ClaudeCodeProvider {
-    fn run(&self, req: &ModelRequest, sink: &mut dyn FnMut(ModelEvent)) {
+    fn run(&self, req: &ModelRequest, cancel: &CancelToken, sink: &mut dyn FnMut(ModelEvent)) {
         let mut child = match self.command(req).spawn() {
             Ok(child) => child,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -152,32 +175,96 @@ impl ModelProvider for ClaudeCodeProvider {
             let _ = stdin.write_all(req.prompt.as_bytes());
         }
 
-        let mut saw_terminal = false;
-        if let Some(stdout) = child.stdout.take() {
-            for line in BufReader::new(stdout).lines() {
-                let line = match line {
-                    Ok(l) => l,
-                    Err(_) => continue,
-                };
-                if line.trim().is_empty() {
-                    continue;
+        // Drain stderr on its own thread for the WHOLE run. A chatty child can
+        // fill the 64 KB pipe buffer; if nobody reads it, the child blocks on
+        // write and the stream deadlocks permanently.
+        let stderr_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+        let stderr_thread = child.stderr.take().map(|mut handle| {
+            let buf = stderr_buf.clone();
+            std::thread::spawn(move || {
+                let mut s = String::new();
+                let _ = handle.read_to_string(&mut s);
+                if let Ok(mut b) = buf.lock() {
+                    b.push_str(&s);
                 }
-                if let Some(event) = parse_line(&line) {
-                    saw_terminal |= event.is_terminal();
-                    sink(event);
+            })
+        });
+
+        // Read stdout lines on a thread → channel, so this loop can watch the
+        // clock and the cancel flag while idle instead of blocking on read.
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let stdout_thread = child.stdout.take().map(|handle| {
+            std::thread::spawn(move || {
+                for line in BufReader::new(handle).lines().map_while(Result::ok) {
+                    if tx.send(line).is_err() {
+                        break;
+                    }
                 }
+            })
+        });
+
+        fn kill_group(child: &mut std::process::Child) {
+            #[cfg(unix)]
+            unsafe {
+                let _ = libc::killpg(child.id() as i32, libc::SIGKILL);
             }
+            let _ = child.kill();
+        }
+
+        let deadline = Instant::now() + self.timeout;
+        let mut saw_terminal = false;
+        let mut killed: Option<ModelEvent> = None;
+        loop {
+            if cancel.is_cancelled() {
+                kill_group(&mut child);
+                killed = Some(ModelEvent::Stopped);
+                break;
+            }
+            if Instant::now() >= deadline {
+                kill_group(&mut child);
+                killed = Some(ModelEvent::Failed {
+                    detail: format!(
+                        "Timed out after {}s — the model call was killed. Try again, or check your connection.",
+                        self.timeout.as_secs()
+                    ),
+                });
+                break;
+            }
+            match rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(line) => {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    if let Some(event) = parse_line(&line) {
+                        saw_terminal |= event.is_terminal();
+                        sink(event);
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+        }
+
+        // After a kill the pipes close, so the reader threads finish promptly.
+        if let Some(t) = stdout_thread {
+            let _ = t.join();
+        }
+        if let Some(t) = stderr_thread {
+            let _ = t.join();
+        }
+
+        if let Some(event) = killed {
+            let _ = child.wait();
+            sink(event);
+            return;
         }
 
         // No terminal event means the process failed before producing a result
         // (bad auth, bad flag, crash). Surface stderr as an Unavailable event so
         // the app stays read-only and the UI can explain why.
         if !saw_terminal {
-            let mut stderr = String::new();
-            if let Some(mut handle) = child.stderr.take() {
-                let _ = handle.read_to_string(&mut stderr);
-            }
             let status = child.wait().ok();
+            let stderr = stderr_buf.lock().map(|b| b.clone()).unwrap_or_default();
             let detail = if stderr.trim().is_empty() {
                 format!(
                     "claude exited without a result (status {:?}).",
@@ -410,7 +497,7 @@ mod tests {
     fn not_installed_binary_yields_unavailable() {
         let provider = ClaudeCodeProvider::with_binary("definitely-not-a-real-binary-xyz");
         let mut events = Vec::new();
-        provider.run(&ModelRequest::planning("hi"), &mut |e| events.push(e));
+        provider.run(&ModelRequest::planning("hi"), &CancelToken::new(), &mut |e| events.push(e));
         assert_eq!(events.len(), 1);
         assert!(matches!(
             events[0],
@@ -429,7 +516,7 @@ mod tests {
         req.model = Some("haiku".into());
 
         let mut events = Vec::new();
-        provider.run(&req, &mut |e| events.push(e));
+        provider.run(&req, &CancelToken::new(), &mut |e| events.push(e));
 
         assert!(
             matches!(events.first(), Some(ModelEvent::Started { .. })),
@@ -450,10 +537,76 @@ mod tests {
         req2.model = Some("haiku".into());
         req2.session_id = session;
         let mut events2 = Vec::new();
-        provider.run(&req2, &mut |e| events2.push(e));
+        provider.run(&req2, &CancelToken::new(), &mut |e| events2.push(e));
         assert!(
             matches!(events2.last(), Some(ModelEvent::Completed { .. })),
             "resumed turn should complete: {events2:?}"
+        );
+    }
+
+    fn stub_script(name: &str, body: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("rh-stub-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(name);
+        std::fs::write(&path, format!("#!/bin/sh\n{body}")).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        path
+    }
+
+    #[test]
+    fn hung_child_is_killed_at_the_timeout() {
+        let script = stub_script("hang-timeout.sh", "sleep 30\n");
+        let provider =
+            ClaudeCodeProvider::with_binary_and_timeout(script.to_str().unwrap(), Duration::from_millis(300));
+        let start = Instant::now();
+        let mut events = Vec::new();
+        provider.run(&ModelRequest::planning("hi"), &CancelToken::new(), &mut |e| events.push(e));
+        assert!(start.elapsed() < Duration::from_secs(5), "must not wait out the child");
+        assert!(
+            matches!(events.last(), Some(ModelEvent::Failed { detail }) if detail.contains("Timed out")),
+            "expected a timeout failure, got {events:?}"
+        );
+    }
+
+    #[test]
+    fn cancel_kills_the_child_and_emits_stopped() {
+        let script = stub_script("hang-cancel.sh", "sleep 30\n");
+        let provider =
+            ClaudeCodeProvider::with_binary_and_timeout(script.to_str().unwrap(), Duration::from_secs(60));
+        let cancel = CancelToken::new();
+        let trigger = cancel.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(150));
+            trigger.cancel();
+        });
+        let start = Instant::now();
+        let mut events = Vec::new();
+        provider.run(&ModelRequest::planning("hi"), &cancel, &mut |e| events.push(e));
+        assert!(start.elapsed() < Duration::from_secs(5), "cancel must not wait out the child");
+        assert_eq!(events.last(), Some(&ModelEvent::Stopped), "got {events:?}");
+    }
+
+    #[test]
+    fn chatty_stderr_cannot_deadlock_the_stream() {
+        // Pre-fix, stderr was only read after stdout EOF: ~1 MB of stderr fills
+        // the 64 KB pipe, the child blocks on write, and the run hangs forever.
+        let body = concat!(
+            "i=0\n",
+            "while [ $i -lt 8192 ]; do echo \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\" >&2; i=$((i+1)); done\n",
+            "echo '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"ok\",\"session_id\":\"s\"}'\n"
+        );
+        let script = stub_script("chatty-stderr.sh", body);
+        let provider =
+            ClaudeCodeProvider::with_binary_and_timeout(script.to_str().unwrap(), Duration::from_secs(30));
+        let mut events = Vec::new();
+        provider.run(&ModelRequest::planning("hi"), &CancelToken::new(), &mut |e| events.push(e));
+        assert!(
+            matches!(events.last(), Some(ModelEvent::Completed { .. })),
+            "expected completion despite stderr flood, got {events:?}"
         );
     }
 }
