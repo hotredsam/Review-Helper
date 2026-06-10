@@ -80,7 +80,9 @@ export function MainPane({ onNewProject }: Props) {
           {active?.github_repo_url && <RepoCache project={active} />}
         </div>
       </header>
-      <div className="flex-1 overflow-auto">
+      {/* Keyed by project so no pane-local state (sync previews, drafts, banners)
+          can ever survive a project switch. */}
+      <div className="flex-1 overflow-auto" key={active?.id ?? "none"}>
         {section.id === "palette" ? (
           <PalettePane />
         ) : section.id === "settings" ? (

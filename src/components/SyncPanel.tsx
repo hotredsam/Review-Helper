@@ -16,6 +16,16 @@ export function SyncPanel({ project }: { project: Project }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // A preview belongs to exactly one project. If this instance is ever reused
+  // across a project switch, drop everything before rendering a stale confirm.
+  const [previewFor, setPreviewFor] = useState(id);
+  if (previewFor !== id) {
+    setPreviewFor(id);
+    setPreview(null);
+    setMsg(null);
+    setError(null);
+  }
+
   if (!project.github_repo_url) return null;
 
   const run = async (key: string, fn: () => Promise<void>) => {

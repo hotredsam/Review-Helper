@@ -60,6 +60,18 @@ describe("SyncPanel", () => {
     expect(await screen.findByText(/removed 1 stale file/i)).toBeTruthy();
   });
 
+  it("drops a loaded preview when the project changes (no cross-project apply)", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<SyncPanel project={project()} />);
+    await user.click(screen.getByRole("button", { name: /Preview push to main/i }));
+    expect(await screen.findByText(/Issue changes \(2\)/i)).toBeTruthy();
+
+    // Same component instance, different project: A's preview must not survive.
+    rerender(<SyncPanel project={project({ id: 2 })} />);
+    expect(screen.queryByText(/Issue changes/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Confirm: push to main/i })).toBeNull();
+  });
+
   it("keeps the preview visible and reports partial failures", async () => {
     ctrl.result = { files_pushed: 4, issues_applied: 1, files_deleted: 0, failures: ["close #9: 403"] };
     const user = userEvent.setup();
