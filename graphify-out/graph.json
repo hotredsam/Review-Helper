@@ -1148,7 +1148,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_register_listener",
-      "community": 102,
+      "community": 101,
       "norm_label": "allow-register-listener"
     },
     {
@@ -1158,7 +1158,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_register_listener_identifier",
-      "community": 102,
+      "community": 101,
       "norm_label": "identifier"
     },
     {
@@ -1168,7 +1168,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_register_listener_description",
-      "community": 102,
+      "community": 101,
       "norm_label": "description"
     },
     {
@@ -1178,7 +1178,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_register_listener_commands",
-      "community": 102,
+      "community": 101,
       "norm_label": "commands"
     },
     {
@@ -1228,7 +1228,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_remove_listener",
-      "community": 104,
+      "community": 10,
       "norm_label": "allow-remove-listener"
     },
     {
@@ -1238,7 +1238,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_remove_listener_identifier",
-      "community": 104,
+      "community": 10,
       "norm_label": "identifier"
     },
     {
@@ -1248,7 +1248,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_remove_listener_description",
-      "community": 104,
+      "community": 10,
       "norm_label": "description"
     },
     {
@@ -1258,7 +1258,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_remove_listener_commands",
-      "community": 104,
+      "community": 10,
       "norm_label": "commands"
     },
     {
@@ -1308,7 +1308,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_set_dock_visibility",
-      "community": 108,
+      "community": 107,
       "norm_label": "allow-set-dock-visibility"
     },
     {
@@ -1318,7 +1318,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_dock_visibility_identifier",
-      "community": 108,
+      "community": 107,
       "norm_label": "identifier"
     },
     {
@@ -1328,7 +1328,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_dock_visibility_description",
-      "community": 108,
+      "community": 107,
       "norm_label": "description"
     },
     {
@@ -1338,7 +1338,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_dock_visibility_commands",
-      "community": 108,
+      "community": 107,
       "norm_label": "commands"
     },
     {
@@ -1348,7 +1348,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_supports_multiple_windows",
-      "community": 111,
+      "community": 110,
       "norm_label": "allow-supports-multiple-windows"
     },
     {
@@ -1358,7 +1358,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_supports_multiple_windows_identifier",
-      "community": 111,
+      "community": 110,
       "norm_label": "identifier"
     },
     {
@@ -1368,7 +1368,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_supports_multiple_windows_description",
-      "community": 111,
+      "community": 110,
       "norm_label": "description"
     },
     {
@@ -1378,7 +1378,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_supports_multiple_windows_commands",
-      "community": 111,
+      "community": 110,
       "norm_label": "commands"
     },
     {
@@ -1388,7 +1388,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_tauri_version",
-      "community": 112,
+      "community": 111,
       "norm_label": "allow-tauri-version"
     },
     {
@@ -1398,7 +1398,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_tauri_version_identifier",
-      "community": 112,
+      "community": 111,
       "norm_label": "identifier"
     },
     {
@@ -1408,7 +1408,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_tauri_version_description",
-      "community": 112,
+      "community": 111,
       "norm_label": "description"
     },
     {
@@ -1418,7 +1418,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_tauri_version_commands",
-      "community": 112,
+      "community": 111,
       "norm_label": "commands"
     },
     {
@@ -1548,7 +1548,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_deny_bundle_type",
-      "community": 114,
+      "community": 113,
       "norm_label": "deny-bundle-type"
     },
     {
@@ -1558,7 +1558,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_bundle_type_identifier",
-      "community": 114,
+      "community": 113,
       "norm_label": "identifier"
     },
     {
@@ -1568,7 +1568,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_bundle_type_description",
-      "community": 114,
+      "community": 113,
       "norm_label": "description"
     },
     {
@@ -1578,7 +1578,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_bundle_type_commands",
-      "community": 114,
+      "community": 113,
       "norm_label": "commands"
     },
     {
@@ -1588,7 +1588,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_deny_default_window_icon",
-      "community": 116,
+      "community": 115,
       "norm_label": "deny-default-window-icon"
     },
     {
@@ -1598,7 +1598,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_default_window_icon_identifier",
-      "community": 116,
+      "community": 115,
       "norm_label": "identifier"
     },
     {
@@ -1608,7 +1608,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_default_window_icon_description",
-      "community": 116,
+      "community": 115,
       "norm_label": "description"
     },
     {
@@ -1618,7 +1618,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_default_window_icon_commands",
-      "community": 116,
+      "community": 115,
       "norm_label": "commands"
     },
     {
@@ -1628,7 +1628,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_deny_fetch_data_store_identifiers",
-      "community": 117,
+      "community": 116,
       "norm_label": "deny-fetch-data-store-identifiers"
     },
     {
@@ -1638,7 +1638,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_fetch_data_store_identifiers_identifier",
-      "community": 117,
+      "community": 116,
       "norm_label": "identifier"
     },
     {
@@ -1648,7 +1648,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_fetch_data_store_identifiers_description",
-      "community": 117,
+      "community": 116,
       "norm_label": "description"
     },
     {
@@ -1658,7 +1658,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_fetch_data_store_identifiers_commands",
-      "community": 117,
+      "community": 116,
       "norm_label": "commands"
     },
     {
@@ -1708,7 +1708,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_deny_name",
-      "community": 120,
+      "community": 119,
       "norm_label": "deny-name"
     },
     {
@@ -1718,7 +1718,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_name_identifier",
-      "community": 120,
+      "community": 119,
       "norm_label": "identifier"
     },
     {
@@ -1728,7 +1728,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_name_description",
-      "community": 120,
+      "community": 119,
       "norm_label": "description"
     },
     {
@@ -1738,7 +1738,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_name_commands",
-      "community": 120,
+      "community": 119,
       "norm_label": "commands"
     },
     {
@@ -1788,7 +1788,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_deny_remove_data_store",
-      "community": 10,
+      "community": 120,
       "norm_label": "deny-remove-data-store"
     },
     {
@@ -1798,7 +1798,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_remove_data_store_identifier",
-      "community": 10,
+      "community": 120,
       "norm_label": "identifier"
     },
     {
@@ -1808,7 +1808,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_remove_data_store_description",
-      "community": 10,
+      "community": 120,
       "norm_label": "description"
     },
     {
@@ -1818,7 +1818,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_remove_data_store_commands",
-      "community": 10,
+      "community": 120,
       "norm_label": "commands"
     },
     {
@@ -3258,7 +3258,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_prepend",
-      "community": 101,
+      "community": 14,
       "norm_label": "allow-prepend"
     },
     {
@@ -3268,7 +3268,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_prepend_identifier",
-      "community": 101,
+      "community": 14,
       "norm_label": "identifier"
     },
     {
@@ -3278,7 +3278,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_prepend_description",
-      "community": 101,
+      "community": 14,
       "norm_label": "description"
     },
     {
@@ -3288,7 +3288,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_prepend_commands",
-      "community": 101,
+      "community": 14,
       "norm_label": "commands"
     },
     {
@@ -3298,7 +3298,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_remove",
-      "community": 103,
+      "community": 102,
       "norm_label": "allow-remove"
     },
     {
@@ -3308,7 +3308,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_remove_identifier",
-      "community": 103,
+      "community": 102,
       "norm_label": "identifier"
     },
     {
@@ -3318,7 +3318,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_remove_description",
-      "community": 103,
+      "community": 102,
       "norm_label": "description"
     },
     {
@@ -3328,7 +3328,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_remove_commands",
-      "community": 103,
+      "community": 102,
       "norm_label": "commands"
     },
     {
@@ -3338,7 +3338,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_remove_at",
-      "community": 14,
+      "community": 80,
       "norm_label": "allow-remove-at"
     },
     {
@@ -3348,7 +3348,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_remove_at_identifier",
-      "community": 14,
+      "community": 80,
       "norm_label": "identifier"
     },
     {
@@ -3358,7 +3358,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_remove_at_description",
-      "community": 14,
+      "community": 80,
       "norm_label": "description"
     },
     {
@@ -3368,7 +3368,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_remove_at_commands",
-      "community": 14,
+      "community": 80,
       "norm_label": "commands"
     },
     {
@@ -3378,7 +3378,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_set_accelerator",
-      "community": 105,
+      "community": 103,
       "norm_label": "allow-set-accelerator"
     },
     {
@@ -3388,7 +3388,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_accelerator_identifier",
-      "community": 105,
+      "community": 103,
       "norm_label": "identifier"
     },
     {
@@ -3398,7 +3398,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_accelerator_description",
-      "community": 105,
+      "community": 103,
       "norm_label": "description"
     },
     {
@@ -3408,7 +3408,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_accelerator_commands",
-      "community": 105,
+      "community": 103,
       "norm_label": "commands"
     },
     {
@@ -3418,7 +3418,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_set_as_app_menu",
-      "community": 106,
+      "community": 104,
       "norm_label": "allow-set-as-app-menu"
     },
     {
@@ -3428,7 +3428,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_as_app_menu_identifier",
-      "community": 106,
+      "community": 104,
       "norm_label": "identifier"
     },
     {
@@ -3438,7 +3438,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_as_app_menu_description",
-      "community": 106,
+      "community": 104,
       "norm_label": "description"
     },
     {
@@ -3448,7 +3448,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_as_app_menu_commands",
-      "community": 106,
+      "community": 104,
       "norm_label": "commands"
     },
     {
@@ -3498,7 +3498,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_set_as_window_menu",
-      "community": 107,
+      "community": 105,
       "norm_label": "allow-set-as-window-menu"
     },
     {
@@ -3508,7 +3508,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_as_window_menu_identifier",
-      "community": 107,
+      "community": 105,
       "norm_label": "identifier"
     },
     {
@@ -3518,7 +3518,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_as_window_menu_description",
-      "community": 107,
+      "community": 105,
       "norm_label": "description"
     },
     {
@@ -3528,7 +3528,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_as_window_menu_commands",
-      "community": 107,
+      "community": 105,
       "norm_label": "commands"
     },
     {
@@ -3538,7 +3538,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_set_as_windows_menu_for_nsapp",
-      "community": 14,
+      "community": 106,
       "norm_label": "allow-set-as-windows-menu-for-nsapp"
     },
     {
@@ -3548,7 +3548,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_as_windows_menu_for_nsapp_identifier",
-      "community": 14,
+      "community": 106,
       "norm_label": "identifier"
     },
     {
@@ -3558,7 +3558,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_as_windows_menu_for_nsapp_description",
-      "community": 14,
+      "community": 106,
       "norm_label": "description"
     },
     {
@@ -3568,7 +3568,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_as_windows_menu_for_nsapp_commands",
-      "community": 14,
+      "community": 106,
       "norm_label": "commands"
     },
     {
@@ -3658,7 +3658,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_set_icon",
-      "community": 109,
+      "community": 108,
       "norm_label": "allow-set-icon"
     },
     {
@@ -3668,7 +3668,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_icon_identifier",
-      "community": 109,
+      "community": 108,
       "norm_label": "identifier"
     },
     {
@@ -3678,7 +3678,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_icon_description",
-      "community": 109,
+      "community": 108,
       "norm_label": "description"
     },
     {
@@ -3688,7 +3688,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_icon_commands",
-      "community": 109,
+      "community": 108,
       "norm_label": "commands"
     },
     {
@@ -3698,7 +3698,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_set_text",
-      "community": 110,
+      "community": 109,
       "norm_label": "allow-set-text"
     },
     {
@@ -3708,7 +3708,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_text_identifier",
-      "community": 110,
+      "community": 109,
       "norm_label": "identifier"
     },
     {
@@ -3718,7 +3718,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_text_description",
-      "community": 110,
+      "community": 109,
       "norm_label": "description"
     },
     {
@@ -3728,7 +3728,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_set_text_commands",
-      "community": 110,
+      "community": 109,
       "norm_label": "commands"
     },
     {
@@ -3738,7 +3738,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_allow_text",
-      "community": 113,
+      "community": 112,
       "norm_label": "allow-text"
     },
     {
@@ -3748,7 +3748,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_text_identifier",
-      "community": 113,
+      "community": 112,
       "norm_label": "identifier"
     },
     {
@@ -3758,7 +3758,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_text_description",
-      "community": 113,
+      "community": 112,
       "norm_label": "description"
     },
     {
@@ -3768,7 +3768,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_allow_text_commands",
-      "community": 113,
+      "community": 112,
       "norm_label": "commands"
     },
     {
@@ -3778,7 +3778,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_deny_append",
-      "community": 80,
+      "community": 14,
       "norm_label": "deny-append"
     },
     {
@@ -3788,7 +3788,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_append_identifier",
-      "community": 80,
+      "community": 14,
       "norm_label": "identifier"
     },
     {
@@ -3798,7 +3798,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_append_description",
-      "community": 80,
+      "community": 14,
       "norm_label": "description"
     },
     {
@@ -3808,7 +3808,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_append_commands",
-      "community": 80,
+      "community": 14,
       "norm_label": "commands"
     },
     {
@@ -3818,7 +3818,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_deny_create_default",
-      "community": 115,
+      "community": 114,
       "norm_label": "deny-create-default"
     },
     {
@@ -3828,7 +3828,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_create_default_identifier",
-      "community": 115,
+      "community": 114,
       "norm_label": "identifier"
     },
     {
@@ -3838,7 +3838,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_create_default_description",
-      "community": 115,
+      "community": 114,
       "norm_label": "description"
     },
     {
@@ -3848,7 +3848,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_create_default_commands",
-      "community": 115,
+      "community": 114,
       "norm_label": "commands"
     },
     {
@@ -3858,7 +3858,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_deny_get",
-      "community": 118,
+      "community": 117,
       "norm_label": "deny-get"
     },
     {
@@ -3868,7 +3868,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_get_identifier",
-      "community": 118,
+      "community": 117,
       "norm_label": "identifier"
     },
     {
@@ -3878,7 +3878,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_get_description",
-      "community": 118,
+      "community": 117,
       "norm_label": "description"
     },
     {
@@ -3888,7 +3888,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_get_commands",
-      "community": 118,
+      "community": 117,
       "norm_label": "commands"
     },
     {
@@ -3938,7 +3938,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_permissions_deny_is_checked",
-      "community": 119,
+      "community": 118,
       "norm_label": "deny-is-checked"
     },
     {
@@ -3948,7 +3948,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_is_checked_identifier",
-      "community": 119,
+      "community": 118,
       "norm_label": "identifier"
     },
     {
@@ -3958,7 +3958,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_is_checked_description",
-      "community": 119,
+      "community": 118,
       "norm_label": "description"
     },
     {
@@ -3968,7 +3968,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_acl_manifests_deny_is_checked_commands",
-      "community": 119,
+      "community": 118,
       "norm_label": "commands"
     },
     {
@@ -80133,5 +80133,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "2a1522e1bf2954dea7ddc717caa75376a2bff179"
+  "built_at_commit": "f879e6d7607a5395cd5732b9d23932a35617f3cd"
 }
