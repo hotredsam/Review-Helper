@@ -54,7 +54,14 @@ describe("InboxPane", () => {
     render(<InboxPane project={project(3)} />);
     expect(await screen.findByText("Idea 1")).toBeTruthy();
     expect(screen.getByText(/ideas waiting/i)).toBeTruthy();
+    // Reject is one-way: it must confirm through the Modal first.
     await user.click(screen.getByRole("button", { name: "Reject Idea 1" }));
+    expect(vi.mocked(featureSetStatus)).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(vi.mocked(featureSetStatus)).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Reject Idea 1" }));
+    await user.click(screen.getByRole("button", { name: "Reject" }));
     expect(vi.mocked(featureSetStatus)).toHaveBeenCalledWith(3, 1, "rejected");
   });
 });

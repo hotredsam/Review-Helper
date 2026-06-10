@@ -83,7 +83,14 @@ describe("DecisionsPane — decisions record", () => {
     expect(screen.getByText(/no server to run/)).toBeTruthy();
     expect(screen.getByText("Active")).toBeTruthy();
 
+    // Supersede is destructive: it must confirm through the Modal first.
     await user.click(screen.getByRole("button", { name: /Supersede Database/i }));
+    expect(vi.mocked(decisionSupersede)).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(vi.mocked(decisionSupersede)).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /Supersede Database/i }));
+    await user.click(screen.getByRole("button", { name: "Supersede" }));
     expect(vi.mocked(decisionSupersede)).toHaveBeenCalledWith(4, 50);
   });
 

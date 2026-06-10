@@ -56,3 +56,26 @@ describe("LearningShell", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("DB locked");
   });
 });
+
+describe("SubjectDetail delete (Phase 15)", () => {
+  it("confirms through the Modal — never window.confirm, which is dead under wry", async () => {
+    const { SubjectDetail } = await import("../components/learning/SubjectDetail");
+    const { subjectDelete } = await import("../api/learning");
+    const { waitFor } = await import("@testing-library/react");
+    const onBack = vi.fn();
+    const user = userEvent.setup();
+    render(<SubjectDetail subjectId={7} onBack={onBack} />);
+    await screen.findByText("Spanish A1");
+
+    await user.click(screen.getByRole("button", { name: "Delete subject" }));
+    expect(vi.mocked(subjectDelete)).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(vi.mocked(subjectDelete)).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Delete subject" }));
+    const btns = screen.getAllByRole("button", { name: "Delete subject" });
+    await user.click(btns[btns.length - 1]);
+    await waitFor(() => expect(vi.mocked(subjectDelete)).toHaveBeenCalledWith(7));
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+  });
+});

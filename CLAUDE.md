@@ -27,6 +27,7 @@ These are wired so they can't be skipped — but follow them anyway:
 - **The model is read-only against any user's source.** In Review Helper's own logic, planning/analysis model calls pass only read/search tools — never Bash, Edit, or Write. The app performs all file writes and commits itself. Never add a code path that lets the model write or commit a user's repo.
 - **Secrets live in the OS keychain or env, never in code, config, or client bundles.** The GitHub token is keychain-only.
 - **The frontend never does privileged work.** Filesystem, GitHub API, and `claude` subprocess calls happen in Rust behind named Tauri commands. React calls commands; it doesn't touch disk, GitHub, or subprocesses.
+- **Destructive actions confirm through the shared `ConfirmDialog`/`Modal` — never `window.confirm`,** which silently returns false under wry (the button would be dead). And never swallow a failed delete: keep the row and surface the error (`setNotice`), or the UI lies about what persisted.
 - **Nothing writes to the record or GitHub silently.** Model-inferred changes become pending suggestions the user approves; GitHub deletions/closes happen only after an explicit confirmed preview.
 
 ## Prompt for the unhappy path

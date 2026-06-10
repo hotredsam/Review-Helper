@@ -3,6 +3,7 @@ import { Plus, Mic, X, AlertTriangle } from "lucide-react";
 import { useFeaturesStore } from "../store/featuresStore";
 import { usePlanStore } from "../store/planStore";
 import { transcribeAudioStub, type Feature } from "../api/features";
+import { ConfirmDialog } from "./ConfirmDialog";
 import type { Project } from "../api/projects";
 
 const EMPTY: Feature[] = [];
@@ -30,6 +31,7 @@ export function InboxPane({ project }: { project: Project }) {
 
   const [title, setTitle] = useState("");
   const [micNote, setMicNote] = useState<string | null>(null);
+  const [confirmReject, setConfirmReject] = useState<Feature | null>(null);
 
   useEffect(() => {
     void load(id);
@@ -126,7 +128,7 @@ export function InboxPane({ project }: { project: Project }) {
               {f.status !== "rejected" && (
                 <button
                   type="button"
-                  onClick={() => void setStatus(id, f.id, "rejected")}
+                  onClick={() => setConfirmReject(f)}
                   aria-label={`Reject ${f.title}`}
                   className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-fg-muted hover:bg-surface-2"
                 >
@@ -137,6 +139,18 @@ export function InboxPane({ project }: { project: Project }) {
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={confirmReject !== null}
+        title="Reject this idea?"
+        body={`"${confirmReject?.title ?? ""}" is marked rejected. There's no way to un-reject it from the UI.`}
+        confirmLabel="Reject"
+        onConfirm={() => {
+          if (confirmReject) void setStatus(id, confirmReject.id, "rejected");
+          setConfirmReject(null);
+        }}
+        onCancel={() => setConfirmReject(null)}
+      />
     </div>
   );
 }

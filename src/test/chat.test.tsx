@@ -77,3 +77,52 @@ describe("chat store (persisted transcripts)", () => {
     expect(useChatStore.getState().pending[9]).toHaveLength(1);
   });
 });
+
+describe("chat deletion (Phase 15)", () => {
+  const meta = (id: number, title: string) => ({ id, title, updated_at: "", message_count: 1 });
+
+  it("rail delete confirms through the Modal; cancel aborts with no API call", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const { ChatHistoryRail } = await import("../components/ChatHistoryRail");
+    const { chatDelete } = await import("../api/chat");
+
+    useChatStore.setState({
+      transcripts: { 7: [meta(100, "Stack chat"), meta(101, "Plan chat")] },
+      activeId: { 7: 100 },
+    } as any);
+
+    const user = userEvent.setup();
+    render(<ChatHistoryRail project={7} />);
+    const [firstDelete] = screen.getAllByRole("button", { name: "Delete chat" });
+
+    await user.click(firstDelete);
+    expect(vi.mocked(chatDelete)).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(vi.mocked(chatDelete)).not.toHaveBeenCalled();
+    expect(useChatStore.getState().transcripts[7]).toHaveLength(2);
+
+    await user.click(screen.getAllByRole("button", { name: "Delete chat" })[0]);
+    // The dialog's confirm button is also named "Delete chat" — it's the last one rendered.
+    const buttons = screen.getAllByRole("button", { name: "Delete chat" });
+    await user.click(buttons[buttons.length - 1]);
+    expect(vi.mocked(chatDelete)).toHaveBeenCalledWith(100);
+  });
+
+  it("keeps the transcript listed and surfaces a notice when the backend delete fails", async () => {
+    const { chatDelete } = await import("../api/chat");
+    const { useUiStore } = await import("../store/uiStore");
+    vi.mocked(chatDelete).mockRejectedValueOnce(new Error("disk I/O error"));
+    useUiStore.getState().setNotice(null);
+    useChatStore.setState({
+      transcripts: { 7: [meta(100, "Stack chat")] },
+      activeId: { 7: 100 },
+    } as any);
+
+    await useChatStore.getState().removeTranscript(7, 100);
+
+    // Row stays — removing it would lie about what persisted.
+    expect(useChatStore.getState().transcripts[7]).toHaveLength(1);
+    expect(useUiStore.getState().notice).toMatch(/Couldn't delete chat/);
+  });
+});

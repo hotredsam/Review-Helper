@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { CheckCheck, Check, X, Inbox, Archive } from "lucide-react";
 import { useDecisionsStore } from "../store/decisionsStore";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { summarizeSuggestion } from "../api/suggestions";
 import type { Decision } from "../api/decisions";
 import type { Project } from "../api/projects";
@@ -22,6 +23,7 @@ export function DecisionsPane({ project }: { project: Project }) {
   const dismiss = useDecisionsStore((s) => s.dismiss);
   const approveAll = useDecisionsStore((s) => s.approveAll);
   const supersede = useDecisionsStore((s) => s.supersede);
+  const [confirmSupersede, setConfirmSupersede] = useState<Decision | null>(null);
 
   useEffect(() => {
     void loadPending(id);
@@ -112,12 +114,28 @@ export function DecisionsPane({ project }: { project: Project }) {
               <DecisionCard
                 key={d.id}
                 decision={d}
-                onSupersede={() => void supersede(id, d.id)}
+                onSupersede={() => setConfirmSupersede(d)}
               />
             ))}
           </ul>
         )}
       </section>
+
+      <ConfirmDialog
+        open={confirmSupersede !== null}
+        title="Supersede this decision?"
+        body={
+          confirmSupersede
+            ? `"${confirmSupersede.topic}: ${confirmSupersede.choice}" will be archived as superseded. This can't be undone from the UI.`
+            : ""
+        }
+        confirmLabel="Supersede"
+        onConfirm={() => {
+          if (confirmSupersede) void supersede(id, confirmSupersede.id);
+          setConfirmSupersede(null);
+        }}
+        onCancel={() => setConfirmSupersede(null)}
+      />
     </div>
   );
 }

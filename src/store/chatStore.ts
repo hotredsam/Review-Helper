@@ -10,6 +10,7 @@ import {
   type TranscriptMeta,
 } from "../api/chat";
 import { suggestionsList, type Suggestion } from "../api/suggestions";
+import { useUiStore } from "./uiStore";
 
 export interface Message {
   role: "user" | "assistant";
@@ -110,8 +111,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   removeTranscript: async (project, transcriptId) => {
     try {
       await chatDelete(transcriptId);
-    } catch {
-      // non-fatal
+    } catch (e) {
+      // The delete didn't persist. Removing the row anyway would lie — it
+      // reappears on the next launch. Keep it and say what happened.
+      useUiStore.getState().setNotice(`Couldn't delete chat: ${String(e)}`);
+      return;
     }
     const wasActive = get().activeId[project] === transcriptId;
     set((s) => ({

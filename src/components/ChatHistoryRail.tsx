@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Plus, Trash2, MessagesSquare } from "lucide-react";
 import { useChatStore } from "../store/chatStore";
+import type { TranscriptMeta } from "../api/chat";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 /** Right-hand rail listing a project's past chats, with a New chat button and
- *  per-chat delete. The active chat is highlighted. */
+ *  per-chat delete (Modal-confirmed — deletion is permanent). */
 export function ChatHistoryRail({ project }: { project: number }) {
   const transcriptsRaw = useChatStore((s) => s.transcripts[project]);
   const transcripts = transcriptsRaw ?? [];
@@ -10,6 +13,7 @@ export function ChatHistoryRail({ project }: { project: number }) {
   const open = useChatStore((s) => s.openTranscript);
   const newChat = useChatStore((s) => s.newChat);
   const remove = useChatStore((s) => s.removeTranscript);
+  const [confirmDelete, setConfirmDelete] = useState<TranscriptMeta | null>(null);
 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-l border-border bg-surface">
@@ -45,7 +49,7 @@ export function ChatHistoryRail({ project }: { project: number }) {
               </button>
               <button
                 type="button"
-                onClick={() => void remove(project, t.id)}
+                onClick={() => setConfirmDelete(t)}
                 aria-label="Delete chat"
                 className="hidden shrink-0 rounded p-1 text-fg-subtle hover:text-danger group-hover:block"
               >
@@ -55,6 +59,18 @@ export function ChatHistoryRail({ project }: { project: number }) {
           );
         })}
       </ul>
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete this chat?"
+        body={`"${confirmDelete?.title ?? "New chat"}" and all its messages are permanently deleted.`}
+        confirmLabel="Delete chat"
+        onConfirm={() => {
+          if (confirmDelete) void remove(project, confirmDelete.id);
+          setConfirmDelete(null);
+        }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </aside>
   );
 }

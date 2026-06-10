@@ -85,6 +85,7 @@ export const useDecisionsStore = create<DecisionsStore>((set, get) => ({
     try {
       await decisionSupersede(id, decisionId);
       await get().loadDecisions(id);
+      notify("Decision superseded.");
     } catch (e) {
       set((s) => ({ error: { ...s.error, [id]: String(e) } }));
     }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { type SubjectDetail as SubjectDetailData, subjectGet, learningPropose } from "../../api/learning";
 import { useLearningStore } from "../../store/learningStore";
+import { ConfirmDialog } from "../ConfirmDialog";
 import { IntakePane } from "./IntakePane";
 import { ModuleProposalPane } from "./ModuleProposalPane";
 import { StudyView } from "./StudyView";
@@ -55,8 +56,9 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
     }
   };
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const onDelete = async () => {
-    if (!confirm("Delete this subject and all its study materials? This can't be undone.")) return;
+    setConfirmDelete(false);
     try {
       await remove(subjectId);
       onBack();
@@ -73,7 +75,7 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
           All subjects
         </button>
         <button
-          onClick={() => void onDelete()}
+          onClick={() => setConfirmDelete(true)}
           aria-label="Delete subject"
           className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs text-fg-muted hover:bg-surface-2 hover:text-danger"
         >
@@ -135,6 +137,15 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
           {detail.stage === "ready" && <StudyView subjectId={subjectId} />}
         </>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete this subject?"
+        body="The subject and all its study materials — notes, flashcards, quizzes, and tutor history — are permanently deleted."
+        confirmLabel="Delete subject"
+        onConfirm={() => void onDelete()}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }
