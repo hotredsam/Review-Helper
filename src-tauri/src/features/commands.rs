@@ -2,7 +2,7 @@
 
 use tauri::State;
 
-use super::{add, list, pending_count, set_status, Feature, TRANSCRIBE_TODO};
+use super::{add, list, pending_count, set_status, Feature};
 use crate::db::Db;
 
 #[tauri::command]
@@ -35,8 +35,4 @@ pub fn features_pending_count(db: State<'_, Db>, project_id: i64) -> Result<i64,
     pending_count(&conn, project_id)
 }
 
-/// Stub for audio capture — returns the placeholder until a provider is wired.
-#[tauri::command]
-pub fn transcribe_audio_stub() -> String {
-    TRANSCRIBE_TODO.to_string()
-}
+

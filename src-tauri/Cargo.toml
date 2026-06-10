@@ -38,4 +38,5 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 pdf-extract = "0.10.0"
 whisper-rs = { version = "0.16.0", features = ["metal"] } # local mic transcription; Metal for M4 speed
 cpal = "0.18.1" # microphone capture for the Inbox mic
+sha2 = "0.11.0"
 

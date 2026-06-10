@@ -21,7 +21,3 @@ export function featureSetStatus(id: number, featureId: number, status: string):
 export function featuresPendingCount(id: number): Promise<number> {
   return invoke<number>("features_pending_count", { projectId: id });
 }
-/** Audio capture stub — returns a placeholder until a provider is wired. */
-export function transcribeAudioStub(): Promise<string> {
-  return invoke<string>("transcribe_audio_stub");
-}

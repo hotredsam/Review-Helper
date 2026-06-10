@@ -9,12 +9,18 @@ vi.mock("../api/features", () => ({
   featureAdd: vi.fn(async () => {}),
   featureSetStatus: vi.fn(async () => {}),
   featuresPendingCount: vi.fn(async () => 0),
-  transcribeAudioStub: vi.fn(async () => "Audio capture isn't wired up yet — type your idea for now."),
+}));
+vi.mock("../api/transcribe", () => ({
+  transcribeStart: vi.fn(async () => {}),
+  transcribeStop: vi.fn(async () => "ship a brisket timer"),
+  transcribeCancel: vi.fn(async () => {}),
+  onTranscribeEvent: vi.fn(async () => () => {}),
 }));
 
 import { InboxPane } from "../components/InboxPane";
 import { useFeaturesStore } from "../store/featuresStore";
-import { featureAdd, featureSetStatus, transcribeAudioStub } from "../api/features";
+import { featureAdd, featureSetStatus } from "../api/features";
+import { transcribeStart, transcribeStop } from "../api/transcribe";
 
 const project = (id: number) => ({ id }) as any;
 
@@ -33,12 +39,17 @@ describe("InboxPane", () => {
     expect(vi.mocked(featureAdd)).toHaveBeenCalledWith(1, "CSV export", "", undefined);
   });
 
-  it("the mic button calls the stub and shows its placeholder", async () => {
+  it("the mic records, stops, and lands the transcript in the capture box", async () => {
     const user = userEvent.setup();
     render(<InboxPane project={project(2)} />);
+
     await user.click(screen.getByRole("button", { name: /Capture by voice/i }));
-    expect(vi.mocked(transcribeAudioStub)).toHaveBeenCalled();
-    expect(await screen.findByText(/isn't wired up yet/i)).toBeTruthy();
+    expect(vi.mocked(transcribeStart)).toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: /Stop recording/i })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: /Stop recording/i }));
+    expect(vi.mocked(transcribeStop)).toHaveBeenCalled();
+    expect(await screen.findByLabelText("Feature idea")).toHaveValue("ship a brisket timer");
   });
 
   it("shows the queue with a reject action and a soft nudge at 10", async () => {

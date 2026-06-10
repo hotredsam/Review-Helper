@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { ArrowLeft, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { type SubjectDetail as SubjectDetailData, subjectGet, learningPropose } from "../../api/learning";
 import { useLearningStore } from "../../store/learningStore";
@@ -23,6 +24,20 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
   const [answered, setAnswered] = useState(0);
   const [totalQs, setTotalQs] = useState(0);
   const [proposing, setProposing] = useState(false);
+  const [proposeProgress, setProposeProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // Big uploads propose per section; show which section the plan is on.
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    void listen<{ subject_id: number; done: number; total: number }>("learning-progress", (e) => {
+      if (e.payload.subject_id === subjectId && e.payload.total > 1) {
+        setProposeProgress({ done: e.payload.done, total: e.payload.total });
+      }
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => unlisten?.();
+  }, [subjectId]);
 
   const load = useCallback(() => {
     return subjectGet(subjectId)
@@ -53,6 +68,7 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
       setError(String(e));
     } finally {
       setProposing(false);
+      setProposeProgress(null);
     }
   };
 
@@ -104,6 +120,11 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
             {detail.source_text?.trim() && (
               <p className="line-clamp-3 text-sm text-fg-muted">{detail.source_text}</p>
             )}
+            {detail.source_kind === "upload" && detail.source_text?.trim() && (
+              <p className="text-xs text-fg-subtle">
+                {detail.source_text.length.toLocaleString()} characters ingested — the study plan covers the whole document.
+              </p>
+            )}
           </div>
 
           {detail.stage === "intake" && (
@@ -126,7 +147,11 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
                   className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
                 >
                   {proposing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  {proposing ? "Designing your plan…" : "Propose study plan"}
+                  {proposing
+                    ? proposeProgress
+                      ? `Designing your plan… (section ${proposeProgress.done}/${proposeProgress.total})`
+                      : "Designing your plan…"
+                    : "Propose study plan"}
                 </button>
               </div>
             </>

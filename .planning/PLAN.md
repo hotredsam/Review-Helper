@@ -52,7 +52,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 | 16 | `phases/phase-16-unfreeze-control.md` — unfreeze & control (async, timeouts, Stop) | done |
 | 17 | `phases/phase-17-settings-truth.md` — settings truth & data integrity (provider, FSRS, transactions) | done |
 | 18 | `phases/phase-18-polish-sweep.md` — polish sweep (races, UX, a11y, hygiene) | done |
-| 19 | `phases/phase-19-voice-ingest.md` — live local Whisper mic + chunked document ingest | planned |
+| 19 | `phases/phase-19-voice-ingest.md` — live local Whisper mic + chunked document ingest | done |
 | 20 | `phases/phase-20-adaptive-profile.md` — adaptive self-learning profile (MD files + cheap reflection) | planned |
 | 21 | `phases/phase-21-study-rag.md` — study-material RAG (hybrid retrieval, citations, labeled web fallback) | planned |
 

@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Plus, Mic, X, AlertTriangle } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Plus, Mic, Square, X, AlertTriangle, Loader2 } from "lucide-react";
 import { useFeaturesStore } from "../store/featuresStore";
 import { usePlanStore } from "../store/planStore";
-import { transcribeAudioStub, type Feature } from "../api/features";
+import type { Feature } from "../api/features";
+import { transcribeStart, transcribeStop, transcribeCancel, onTranscribeEvent, type TranscribeEvent } from "../api/transcribe";
 import { ConfirmDialog } from "./ConfirmDialog";
 import type { Project } from "../api/projects";
 
@@ -30,12 +31,52 @@ export function InboxPane({ project }: { project: Project }) {
   const planBusy = usePlanStore((s) => s.analysis[id] === "running");
 
   const [title, setTitle] = useState("");
-  const [micNote, setMicNote] = useState<string | null>(null);
   const [confirmReject, setConfirmReject] = useState<Feature | null>(null);
+
+  type MicState = "idle" | "starting" | "recording" | "transcribing";
+  const [mic, setMic] = useState<MicState>("idle");
+  const [micPartial, setMicPartial] = useState("");
+  const [micStatus, setMicStatus] = useState<string | null>(null);
+  const [micError, setMicError] = useState<string | null>(null);
+  const micRef = useRef<MicState>("idle");
+  micRef.current = mic;
 
   useEffect(() => {
     void load(id);
   }, [id, load]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    void onTranscribeEvent((e: TranscribeEvent) => {
+      switch (e.type) {
+        case "state":
+          if (e.state === "downloading") setMicStatus("Downloading the speech model (one-time, ~550 MB)…");
+          else if (e.state === "loading_model") setMicStatus("Loading the speech model…");
+          else if (e.state === "recording") setMicStatus(null);
+          else if (e.state === "transcribing") setMicStatus("Finishing the transcript…");
+          break;
+        case "model_download":
+          setMicStatus(`Downloading the speech model… ${Math.round((e.done / e.total) * 100)}%`);
+          break;
+        case "partial":
+          setMicPartial(e.text);
+          break;
+        case "error":
+          setMicError(e.detail);
+          break;
+        case "final":
+          break;
+      }
+    }).then((u) => {
+      unlisten = u;
+    });
+    return () => {
+      unlisten?.();
+      // Leaving the pane mid-recording discards the session — never a zombie mic.
+      if (micRef.current === "recording" || micRef.current === "starting") void transcribeCancel();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pending = features.filter((f) => f.status === "inbox" || f.status === "triaged").length;
 
@@ -48,7 +89,33 @@ export function InboxPane({ project }: { project: Project }) {
   };
 
   const onMic = async () => {
-    setMicNote(await transcribeAudioStub());
+    setMicError(null);
+    if (mic === "idle") {
+      setMic("starting");
+      setMicPartial("");
+      try {
+        await transcribeStart();
+        setMic("recording");
+      } catch (e) {
+        setMicError(String(e));
+        setMic("idle");
+        setMicStatus(null);
+      }
+      return;
+    }
+    if (mic === "recording") {
+      setMic("transcribing");
+      try {
+        const text = await transcribeStop();
+        if (text.trim()) setTitle((t) => (t.trim() ? `${t.trim()} ${text.trim()}` : text.trim()));
+      } catch (e) {
+        setMicError(String(e));
+      } finally {
+        setMic("idle");
+        setMicPartial("");
+        setMicStatus(null);
+      }
+    }
   };
 
   return (
@@ -64,11 +131,23 @@ export function InboxPane({ project }: { project: Project }) {
         <button
           type="button"
           onClick={() => void onMic()}
-          aria-label="Capture by voice"
-          title="Capture by voice"
-          className="flex h-10 w-10 items-center justify-center rounded-lg border border-border text-fg-muted hover:bg-surface-2"
+          disabled={mic === "starting" || mic === "transcribing"}
+          aria-label={mic === "recording" ? "Stop recording" : "Capture by voice"}
+          title={mic === "recording" ? "Stop recording" : "Capture by voice"}
+          className={
+            "flex h-10 w-10 items-center justify-center rounded-lg disabled:opacity-60 " +
+            (mic === "recording"
+              ? "bg-danger text-danger-fg hover:opacity-90"
+              : "border border-border text-fg-muted hover:bg-surface-2")
+          }
         >
-          <Mic className="h-4 w-4" />
+          {mic === "starting" || mic === "transcribing" ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : mic === "recording" ? (
+            <Square className="h-4 w-4" />
+          ) : (
+            <Mic className="h-4 w-4" />
+          )}
         </button>
         <button
           type="submit"
@@ -79,9 +158,14 @@ export function InboxPane({ project }: { project: Project }) {
         </button>
       </form>
 
-      {micNote && (
+      {(micStatus || mic === "recording") && (
         <p className="rounded-md border border-border bg-surface-2 px-3 py-2 text-xs text-fg-muted" role="status">
-          {micNote}
+          {micStatus ?? (micPartial ? micPartial : "Listening… speak your idea, then press stop.")}
+        </p>
+      )}
+      {micError && (
+        <p className="text-sm text-danger" role="alert">
+          {micError}
         </p>
       )}
       {error && (

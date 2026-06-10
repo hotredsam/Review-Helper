@@ -9,9 +9,6 @@ pub mod commands;
 
 /// Placeholder returned by the audio-transcription stub. The mic button shows
 /// this until a real provider is wired.
-// TODO(phase-10): wire local Whisper or an MCP transcription server here.
-pub const TRANSCRIBE_TODO: &str =
-    "Audio capture isn't wired up yet — type your idea for now. (TODO: connect local Whisper or an MCP transcription server.)";
 
 #[derive(Debug, Serialize, PartialEq)]
 pub struct Feature {

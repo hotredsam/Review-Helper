@@ -10,6 +10,7 @@ pub mod context;
 mod decisions;
 mod features;
 mod config;
+mod transcribe;
 mod db;
 mod github;
 mod grill;
@@ -129,7 +130,9 @@ pub fn run() {
             features::commands::feature_add,
             features::commands::feature_set_status,
             features::commands::features_pending_count,
-            features::commands::transcribe_audio_stub,
+            transcribe::commands::transcribe_start,
+            transcribe::commands::transcribe_stop,
+            transcribe::commands::transcribe_cancel,
             stack::commands::stack_catalog,
             stack::commands::stack_premade,
             stack::commands::stack_list,

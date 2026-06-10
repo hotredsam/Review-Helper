@@ -48,6 +48,7 @@ Most AI-assisted projects don't fail at the code — they fail at the **spec**: 
 - 🪄 **Easy ↔ Technical** — one global toggle flips every explanation between plain-language and precise-technical registers; the model pre-generates both, so switching is instant and free.
 - 🗂️ **Decisions, stack & feature inbox** — an ADR-style decision log (with supersede history), a five-pane stack picker, and a quick-capture inbox that nudges you to fold ideas into the plan.
 - 🧭 **Plan → GitHub** — one consistent phased plan rendered as clean Markdown with collapsible phases, synced one-way to issues (one per phase, matched by a stable marker so re-pushes update instead of duplicating), behind a gated, fully-previewed push to `main`.
+- 🎙️ **Local voice capture** — dictate Inbox ideas to a real on-device Whisper model (`large-v3-turbo`, Metal-accelerated): live streaming partials while you speak, a clean final transcript on stop, and nothing ever leaves your Mac. Tested at ~3× realtime on an M4.
 - 🎓 **Learning mode** — a second top-level shell: name a subject (describe it or upload notes/a PDF), get **grilled on scope first**, pick from a **generatively-proposed study plan**, then study generated **notes, flashcards, and quizzes** with a built-in **tutor** — all adapting to how you actually learn ([see below](#learning-mode--study-anything-adaptively)).
 - 📊 **Visualization & onboarding** — radar/gauge/donut charts for the scorecard, a first-run tour, and inline "why" explainers.
 - 🖼️ **Design export** — `npm run export:design` bundles every screen (sample data, all themes) into one self-contained HTML snapshot on your Desktop.
@@ -86,7 +87,7 @@ flowchart LR
 
 ## Learning mode — study anything, adaptively
 
-Flip the **Code ↔ Learn** switch and the whole app becomes a study workspace. Add a subject (describe a goal, or upload material — text, Markdown, or PDF) and it scopes, proposes, then builds material that adapts as you go:
+Flip the **Code ↔ Learn** switch and the whole app becomes a study workspace. Add a subject (describe a goal, or upload material — text, Markdown, or PDF) and it scopes, proposes, then builds material that adapts as you go. Big documents are **fully covered**: uploads are split into structure-aware sections, the study plan is proposed per section (with live progress), and every module's notes/cards/quiz are grounded on the exact part of the document they came from — no silent truncation. Flashcards run on a real **FSRS due queue** (due cards first, capped new cards, honest "nothing due until…" states):
 
 ```mermaid
 flowchart LR
@@ -132,6 +133,7 @@ flowchart LR
 | Database | **embedded SQLite** via `rusqlite` (bundled — no system dependency) |
 | Model | **Claude Code** via `claude -p` (stream-json) behind a `ModelProvider` interface |
 | Learning engine | **`rs-fsrs`** (FSRS spaced repetition) + an in-house Rust **Bayesian Knowledge Tracing** mastery model + **`pdf-extract`** (PDF upload ingest) + **react-markdown** (notes/tutor) |
+| Voice capture | **`whisper-rs`** (whisper.cpp, Metal) running `ggml-large-v3-turbo-q5_0` locally + **`cpal`** microphone capture — auto-downloaded (sha256-verified) on first use |
 
 ## Security & trust boundaries
 
