@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-06-09)
 
 ## Corpus Check
-- 261 files · ~160,417 words
+- 263 files · ~162,392 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -312,20 +312,20 @@ Cohesion: 0.13
 Nodes (23): D, GenDecision, GenPhase, GenStack, GenTask, coerces_array_prose_fields_to_strings(), extract_json(), extracts_from_fenced_and_prefixed_output() (+15 more)
 
 ### Community 31 - "Community 31"
-Cohesion: 0.14
-Nodes (15): ModelStatus, ModelBanner(), ModelDebug(), Tour(), TOUR_STEPS, tourSeen(), TourStep, App() (+7 more)
-
-### Community 32 - "Community 32"
 Cohesion: 0.13
 Nodes (15): githubConnectGh(), githubListRepos(), githubSignOut(), githubStatus, RepoSummary, ConnectHint(), Mode, NewProjectDialog() (+7 more)
 
-### Community 33 - "Community 33"
+### Community 32 - "Community 32"
 Cohesion: 0.13
 Nodes (22): core, core:app, default_permission, global_scope_schema, permission_sets, default_permission, core:event, default_permission (+14 more)
 
-### Community 34 - "Community 34"
+### Community 33 - "Community 33"
 Cohesion: 0.21
 Nodes (20): assembles_from_seeded_rows_excluding_inactive(), code_fence_in_a_value_cannot_break_out_of_its_delimiter(), ContextAnswer, ContextDecision, ContextStack, db(), empty_project_yields_an_empty_bundle(), fence_safe() (+12 more)
+
+### Community 34 - "Community 34"
+Cohesion: 0.16
+Nodes (14): ModelStatus, ModelBanner(), Tour(), TOUR_STEPS, tourSeen(), TourStep, App(), NoticeBar() (+6 more)
 
 ### Community 35 - "Community 35"
 Cohesion: 0.17
@@ -380,28 +380,28 @@ Cohesion: 0.21
 Nodes (13): getModelStatus(), ModelEvent, onModelEvent(), runModel(), UnavailableReason, ModelConsole(), appendAssistant(), ensureModelListener() (+5 more)
 
 ### Community 48 - "Community 48"
+Cohesion: 0.19
+Nodes (9): getModelConfig(), ModelConfig, ProviderKind, setModelConfig(), GithubConnect(), ModelDebug(), ProviderSettings(), SettingsView() (+1 more)
+
+### Community 49 - "Community 49"
 Cohesion: 0.30
 Nodes (15): answered_count(), db(), fetch_questions(), intake_save_list_answer_and_count(), IntakeItem, list(), Qs, save() (+7 more)
 
-### Community 49 - "Community 49"
+### Community 50 - "Community 50"
 Cohesion: 0.14
 Nodes (11): params, assessment, callbacks, cards, handlers, installMock(), plan, project (+3 more)
 
-### Community 50 - "Community 50"
+### Community 51 - "Community 51"
 Cohesion: 0.28
 Nodes (10): a_scripted_unavailable_is_terminal(), collect(), FakeProvider, streams_ordered_events_ending_in_one_terminal(), FnMut, ModelEvent, ModelProvider, ModelRequest (+2 more)
-
-### Community 51 - "Community 51"
-Cohesion: 0.13
-Nodes (14): anyOf, anyOf, description, definitions, Application, Target, Value, description (+6 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.13
 Nodes (14): anyOf, anyOf, description, definitions, Application, Target, Value, description (+6 more)
 
 ### Community 53 - "Community 53"
-Cohesion: 0.24
-Nodes (8): getModelConfig(), ModelConfig, ProviderKind, setModelConfig(), GithubConnect(), ProviderSettings(), SettingsView(), store
+Cohesion: 0.13
+Nodes (14): anyOf, anyOf, description, definitions, Application, Target, Value, description (+6 more)
 
 ### Community 54 - "Community 54"
 Cohesion: 0.36
@@ -461,7 +461,7 @@ Nodes (6): LocalStubProvider, stub_emits_one_terminal_notice(), FnMut, ModelEven
 
 ### Community 68 - "Community 68"
 Cohesion: 0.21
-Nodes (8): commands, description, identifier, commands, description, identifier, allow-remove-at, deny-identifier
+Nodes (8): commands, description, identifier, commands, description, identifier, deny-append, deny-identifier
 
 ### Community 69 - "Community 69"
 Cohesion: 0.25
@@ -505,31 +505,31 @@ Nodes (3): kickoff_user(), merge_user(), String
 
 ### Community 79 - "Community 79"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-append
+Nodes (4): commands, description, identifier, allow-create-default
 
 ### Community 80 - "Community 80"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-create-default
+Nodes (4): commands, description, identifier, allow-identifier
 
 ### Community 81 - "Community 81"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-identifier
+Nodes (4): commands, description, identifier, allow-is-checked
 
 ### Community 82 - "Community 82"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-is-checked
+Nodes (4): commands, description, identifier, allow-is-enabled
 
 ### Community 83 - "Community 83"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-is-enabled
+Nodes (4): commands, description, identifier, allow-items
 
 ### Community 84 - "Community 84"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-items
+Nodes (4): commands, description, identifier, allow-name
 
 ### Community 85 - "Community 85"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-name
+Nodes (4): commands, description, identifier, allow-popup
 
 ### Community 86 - "Community 86"
 Cohesion: 0.50
@@ -545,19 +545,19 @@ Nodes (4): commands, description, identifier, allow-remove
 
 ### Community 89 - "Community 89"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-set-accelerator
+Nodes (4): commands, description, identifier, allow-remove-listener
 
 ### Community 90 - "Community 90"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-set-as-app-menu
+Nodes (4): commands, description, identifier, allow-set-accelerator
 
 ### Community 91 - "Community 91"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-set-as-window-menu
+Nodes (4): commands, description, identifier, allow-set-as-app-menu
 
 ### Community 92 - "Community 92"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-set-as-windows-menu-for-nsapp
+Nodes (4): commands, description, identifier, allow-set-as-window-menu
 
 ### Community 93 - "Community 93"
 Cohesion: 0.50
@@ -687,7 +687,7 @@ Nodes (3): PermissionEntry, anyOf, description
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `init_connection()` connect `Community 1` to `Community 5`, `Community 6`, `Community 8`, `Community 11`, `Community 12`, `Community 17`, `Community 19`, `Community 23`, `Community 24`, `Community 25`, `Community 27`, `Community 28`, `Community 34`, `Community 36`, `Community 38`, `Community 39`, `Community 41`, `Community 42`, `Community 46`, `Community 48`, `Community 54`, `Community 61`?**
+- **Why does `init_connection()` connect `Community 1` to `Community 5`, `Community 6`, `Community 8`, `Community 11`, `Community 12`, `Community 17`, `Community 19`, `Community 23`, `Community 24`, `Community 25`, `Community 27`, `Community 28`, `Community 33`, `Community 36`, `Community 38`, `Community 39`, `Community 41`, `Community 42`, `Community 46`, `Community 49`, `Community 54`, `Community 61`?**
   _High betweenness centrality (0.330) - this node is a cross-community bridge._
 - **Why does `memory_db()` connect `Community 5` to `Community 1`?**
   _High betweenness centrality (0.205) - this node is a cross-community bridge._
