@@ -139,6 +139,33 @@ The interesting part: this app was built the way it tells you to build — phase
 
 Current suites: **159 Rust + 103 frontend tests**, green, on every push.
 
+### By the numbers
+
+```mermaid
+timeline
+    title The build, in eras
+    Phases 1–14 : Scaffold → plan loop → hardening : 5-round multi-agent council (~34 fixes)
+    Phases A–H : Learning mode : Persistent chat memory : Design export
+    Audit day : 55 agents, 7 dimensions : 52 verified findings, 0 refuted
+    Phases 15–21 : All 52 fixed : Local voice : Adaptive profile : Study RAG
+```
+
+```mermaid
+xychart-beta
+    title "Test suite growth across the overhaul (backend + frontend)"
+    x-axis ["audit day", "after phase 18", "after phase 21"]
+    y-axis "total tests" 180 --> 280
+    bar [210, 236, 262]
+```
+
+```mermaid
+pie showData title Audit findings by severity — every one fixed
+    "Major" : 16
+    "Minor" : 24
+    "Polish" : 12
+```
+
+
 <details>
 <summary><b>Full phase history (1–21 + the A–H overhaul)</b></summary>
 
