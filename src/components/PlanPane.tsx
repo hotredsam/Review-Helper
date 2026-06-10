@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Loader2, Play, Sparkles, AlertTriangle } from "lucide-react";
+import { modelStop } from "../api/model";
 import { usePlanStore, ensureAnalysisListener } from "../store/planStore";
 import { WhyExplain } from "./WhyExplain";
 import { SyncPanel } from "./SyncPanel";
@@ -58,6 +59,13 @@ export function PlanPane({ project }: { project: Project }) {
           Reading files read-only and drafting a plan. This can take a minute.
         </p>
         {recent && <p className="text-xs text-fg-subtle">{recent}</p>}
+        <button
+          type="button"
+          onClick={() => void modelStop(`plan:${project.id}`)}
+          className="rounded-md border border-border px-2.5 py-1 text-xs text-fg-muted hover:bg-surface-2"
+        >
+          Cancel
+        </button>
       </Center>
     );
   }

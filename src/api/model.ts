@@ -16,11 +16,18 @@ export type ModelEvent =
   | { type: "notice"; message: string }
   | { type: "completed"; session_id: string | null; text: string }
   | { type: "unavailable"; reason: UnavailableReason; detail: string }
-  | { type: "failed"; detail: string };
+  | { type: "failed"; detail: string }
+  | { type: "stopped" };
 
 /** Start a model run. Events arrive asynchronously via `onModelEvent`. */
 export function runModel(prompt: string, sessionId?: string | null): Promise<void> {
   return invoke("model_run", { prompt, sessionId: sessionId ?? null });
+}
+
+/** Cancel an in-flight model run by registry key ("chat:42", "tutor:7",
+ *  "learning:13", "plan:3", "assess:3", "console"). false = already finished. */
+export function modelStop(runKey: string): Promise<boolean> {
+  return invoke<boolean>("model_stop", { runKey });
 }
 
 /** Subscribe to streamed model events. Returns an unlisten function. */

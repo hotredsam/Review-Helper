@@ -175,9 +175,16 @@ fn push_files(owner: &str, repo: &str, branch: &str, files: &[PackageFile]) -> R
 
 /// Push the planning package to the `planning` branch (created from the default
 /// branch head if missing). Idempotent.
-pub fn push_planning_branch(conn: &Connection, project_id: i64) -> Result<usize, String> {
-    let (owner, repo, default_branch) = owner_repo(conn, project_id)?;
-    let files = package(conn, project_id)?;
+pub fn push_planning_branch(db: &crate::db::Db, project_id: i64) -> Result<usize, String> {
+    // Read everything under a short lock, then drop it — the GitHub calls below
+    // must never run while holding the global DB mutex (the apply_main_sync
+    // discipline; holding it froze every other feature for the whole push).
+    let (owner, repo, default_branch, files) = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let (owner, repo, default_branch) = owner_repo(&conn, project_id)?;
+        let files = package(&conn, project_id)?;
+        (owner, repo, default_branch, files)
+    };
     if files.is_empty() {
         return Err("No plan to sync yet — analyze or kick off a plan first.".into());
     }
@@ -245,15 +252,22 @@ pub struct SyncResult {
 
 /// Read-only preview of the push-to-main: issue reconciliation + the stale
 /// phase docs that would be pruned. Nothing is written.
-pub fn preview_main_sync(conn: &Connection, project_id: i64) -> Result<SyncPreview, String> {
-    let (owner, repo, default_branch) = owner_repo(conn, project_id)?;
+pub fn preview_main_sync(db: &crate::db::Db, project_id: i64) -> Result<SyncPreview, String> {
+    // Same lock discipline as apply/push: short lock for reads, no lock during
+    // the GitHub network calls.
+    let (owner, repo, default_branch, plans, files) = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let (owner, repo, default_branch) = owner_repo(&conn, project_id)?;
+        let plans = phase_plans(&conn, project_id)?;
+        let files = package(&conn, project_id)?;
+        (owner, repo, default_branch, plans, files)
+    };
     let existing: Vec<IssueRef> = crate::github::api::list_issues(&owner, &repo)?
         .into_iter()
         .map(|g| IssueRef { number: g.number, title: g.title, body: g.body, state: g.state, labels: g.labels })
         .collect();
-    let issue_actions = reconcile(&existing, &phase_plans(conn, project_id)?);
+    let issue_actions = reconcile(&existing, &plans);
 
-    let files = package(conn, project_id)?;
     let keep: std::collections::HashSet<&str> = files.iter().map(|f| f.path.as_str()).collect();
     let file_deletions: Vec<String> = crate::github::api::list_dir(&owner, &repo, ".planning/phases", &default_branch)?
         .into_iter()

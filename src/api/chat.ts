@@ -18,7 +18,8 @@ export type ChatEvent =
   | { type: "token"; project_id: number; transcript_id: number; text: string }
   | { type: "tool"; project_id: number; transcript_id: number; name: string }
   | { type: "done"; project_id: number; transcript_id: number; reply: string; suggestions: number }
-  | { type: "failed"; project_id: number; transcript_id: number; detail: string };
+  | { type: "failed"; project_id: number; transcript_id: number; detail: string }
+  | { type: "stopped"; project_id: number; transcript_id: number; partial: string };
 
 /** Send a turn in a specific transcript (the full chat history is injected backend-side). */
 export function chatSend(id: number, transcriptId: number, message: string): Promise<void> {

@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { Loader2, Gauge, AlertTriangle } from "lucide-react";
+import { modelStop } from "../api/model";
 import { useAssessStore, ensureAssessListener } from "../store/assessStore";
 import { RadarChart, ScoreRing } from "./charts";
 import { InfoDot } from "./InfoDot";
@@ -59,6 +60,13 @@ export function StatePane({ project }: { project: Project }) {
         <Loader2 className="h-7 w-7 animate-spin text-accent" />
         <p className="text-sm font-medium text-fg">Assessing the project…</p>
         <p className="text-xs text-fg-subtle">{(progressRaw ?? []).slice(-3).join(" · ") || "Running the scan and scoring."}</p>
+        <button
+          type="button"
+          onClick={() => void modelStop(`assess:${project.id}`)}
+          className="rounded-md border border-border px-2.5 py-1 text-xs text-fg-muted hover:bg-surface-2"
+        >
+          Cancel
+        </button>
       </Center>
     );
   }

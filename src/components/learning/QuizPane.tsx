@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, Loader2, RotateCcw, X } from "lucide-react";
+import { modelStop } from "../../api/model";
 import { type QuizQuestion, type QuizResult, learningQuiz, learningQuizAnswer } from "../../api/learning";
 
 /** Multiple-choice retrieval practice. Answering records the attempt, updates the
@@ -47,6 +48,13 @@ export function QuizPane({ moduleId, onAnswered }: { moduleId: number; onAnswere
     return (
       <p className="flex items-center gap-2 text-sm text-fg-subtle">
         <Loader2 className="h-4 w-4 animate-spin" /> Writing your quiz…
+        <button
+          type="button"
+          onClick={() => void modelStop(`learning:${moduleId}`)}
+          className="rounded-md border border-border px-2 py-0.5 text-xs text-fg-muted hover:bg-surface-2"
+        >
+          Cancel
+        </button>
       </p>
     );
   }

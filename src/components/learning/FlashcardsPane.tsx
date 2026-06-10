@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Loader2, RotateCcw } from "lucide-react";
+import { modelStop } from "../../api/model";
 import { type Flashcard, learningFlashcards, learningFlashcardGrade } from "../../api/learning";
 
 // FSRS grades. Again/Hard count as lapses; Good/Easy as recalled (drives mastery).
@@ -45,6 +46,13 @@ export function FlashcardsPane({ moduleId }: { moduleId: number }) {
     return (
       <p className="flex items-center gap-2 text-sm text-fg-subtle">
         <Loader2 className="h-4 w-4 animate-spin" /> Building your flashcards…
+        <button
+          type="button"
+          onClick={() => void modelStop(`learning:${moduleId}`)}
+          className="rounded-md border border-border px-2 py-0.5 text-xs text-fg-muted hover:bg-surface-2"
+        >
+          Cancel
+        </button>
       </p>
     );
   }

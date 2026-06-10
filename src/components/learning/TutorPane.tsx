@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Send, Square } from "lucide-react";
+import { modelStop } from "../../api/model";
 import { type TutorMsg, learningTutorHistory, learningTutorSend } from "../../api/learning";
 import { MarkdownBlock } from "../MarkdownBlock";
 
@@ -98,14 +99,26 @@ export function TutorPane({ subjectId }: { subjectId: number }) {
           aria-label="Message the tutor"
           className="flex-1 rounded-lg border border-border bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/40"
         />
-        <button
-          type="submit"
-          disabled={busy || !draft.trim()}
-          aria-label="Send"
-          className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
-        >
-          <Send className="h-4 w-4" />
-        </button>
+        {busy ? (
+          <button
+            type="button"
+            onClick={() => void modelStop(`tutor:${subjectId}`)}
+            aria-label="Stop"
+            title="Stop the tutor's reply"
+            className="flex items-center gap-1.5 rounded-lg bg-danger px-3 py-2 text-sm font-medium text-danger-fg hover:opacity-90"
+          >
+            <Square className="h-4 w-4" />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!draft.trim()}
+            aria-label="Send"
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        )}
       </form>
     </div>
   );

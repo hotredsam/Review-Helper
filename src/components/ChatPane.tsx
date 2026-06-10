@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Loader2, Send, MessagesSquare, Lightbulb, Check, X } from "lucide-react";
+import { Loader2, Send, Square, MessagesSquare, Lightbulb, Check, X } from "lucide-react";
+import { modelStop } from "../api/model";
 import { useChatStore, ensureChatListener, type Message } from "../store/chatStore";
 import { useDecisionsStore } from "../store/decisionsStore";
 import { ChatHistoryRail } from "./ChatHistoryRail";
@@ -159,15 +160,27 @@ export function ChatPane({ project }: { project: Project }) {
               aria-label="Chat message"
               className="flex-1 resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/40"
             />
-            <button
-              type="button"
-              onClick={submit}
-              disabled={streaming || !draft.trim()}
-              aria-label="Send"
-              className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-accent-fg hover:bg-accent-hover disabled:opacity-60"
-            >
-              {streaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </button>
+            {streaming ? (
+              <button
+                type="button"
+                onClick={() => activeId != null && void modelStop(`chat:${activeId}`)}
+                aria-label="Stop"
+                title="Stop the response"
+                className="flex h-10 w-10 items-center justify-center rounded-lg bg-danger text-danger-fg hover:opacity-90"
+              >
+                <Square className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={submit}
+                disabled={!draft.trim()}
+                aria-label="Send"
+                className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>

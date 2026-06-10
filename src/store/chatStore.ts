@@ -206,6 +206,21 @@ function handle(e: ChatEvent) {
         error: { ...s.error, [e.project_id]: e.detail },
       }));
       break;
+    case "stopped":
+      // Keep the partial text (it's persisted backend-side); a stop before any
+      // token just drops the empty placeholder bubble.
+      if (e.partial.trim() === "") {
+        useChatStore.setState((s) => {
+          const msgs = (s.messages[e.transcript_id] ?? []).slice();
+          const last = msgs[msgs.length - 1];
+          if (last?.role === "assistant" && last.text === "") msgs.pop();
+          return { messages: { ...s.messages, [e.transcript_id]: msgs } };
+        });
+      } else {
+        patchLastAssistant(e.transcript_id, (m) => ({ ...m, text: e.partial, streaming: false }));
+      }
+      useChatStore.setState((s) => ({ status: { ...s.status, [e.project_id]: "idle" } }));
+      break;
   }
 }
 

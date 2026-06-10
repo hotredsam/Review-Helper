@@ -206,7 +206,7 @@ pub fn project_create_repo(db: State<Db>, name: String, private: bool) -> Result
 /// Clone (or refresh) a project's repo into the app-data clone cache. Idempotent:
 /// the first call clones, later calls re-pull. Used on attach and on "refresh".
 #[tauri::command]
-pub fn project_clone(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Result<Project, String> {
+pub async fn project_clone(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Result<Project, String> {
     let project = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         projects::get(&conn, project_id)?.ok_or("Project not found.")?

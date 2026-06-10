@@ -17,16 +17,14 @@ pub fn sync_package(db: State<'_, Db>, project_id: i64) -> Result<Vec<PackageFil
 
 /// Push the package to the `planning` branch (non-destructive). Returns the count.
 #[tauri::command]
-pub fn sync_push_planning(db: State<'_, Db>, project_id: i64) -> Result<usize, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
-    push_planning_branch(&conn, project_id)
+pub async fn sync_push_planning(db: State<'_, Db>, project_id: i64) -> Result<usize, String> {
+    push_planning_branch(db.inner(), project_id)
 }
 
 /// Preview the push-to-main: every issue change + every file deletion. Read-only.
 #[tauri::command]
-pub fn sync_main_preview(db: State<'_, Db>, project_id: i64) -> Result<SyncPreview, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
-    preview_main_sync(&conn, project_id)
+pub async fn sync_main_preview(db: State<'_, Db>, project_id: i64) -> Result<SyncPreview, String> {
+    preview_main_sync(db.inner(), project_id)
 }
 
 /// Apply the confirmed preview (push docs + replay issue actions + delete the
@@ -36,6 +34,6 @@ pub fn sync_main_preview(db: State<'_, Db>, project_id: i64) -> Result<SyncPrevi
 /// only locked for the brief reads/writes around the GitHub network I/O, never
 /// across it — a slow or hung sync can't freeze the rest of the app.
 #[tauri::command]
-pub fn sync_main_apply(db: State<'_, Db>, project_id: i64, preview: SyncPreview) -> Result<SyncResult, String> {
+pub async fn sync_main_apply(db: State<'_, Db>, project_id: i64, preview: SyncPreview) -> Result<SyncResult, String> {
     apply_main_sync(db.inner(), project_id, preview)
 }

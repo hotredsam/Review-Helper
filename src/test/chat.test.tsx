@@ -126,3 +126,29 @@ describe("chat deletion (Phase 15)", () => {
     expect(useUiStore.getState().notice).toMatch(/Couldn't delete chat/);
   });
 });
+
+describe("chat stop (Phase 16)", () => {
+  it("keeps the partial text and returns to idle when a stream is stopped", async () => {
+    ensureChatListener();
+    await useChatStore.getState().send(7, "explain my stack");
+    const tid = useChatStore.getState().activeId[7]!;
+    ctrl.cb!({ type: "token", project_id: 7, transcript_id: tid, text: "Half an answ" });
+    ctrl.cb!({ type: "stopped", project_id: 7, transcript_id: tid, partial: "Half an answ" });
+
+    const msgs = useChatStore.getState().messages[tid];
+    expect(msgs[msgs.length - 1]).toEqual({ role: "assistant", text: "Half an answ", streaming: false });
+    expect(useChatStore.getState().status[7]).toBe("idle");
+  });
+
+  it("drops the empty placeholder bubble when stopped before any token", async () => {
+    ensureChatListener();
+    await useChatStore.getState().send(8, "never mind");
+    const tid = useChatStore.getState().activeId[8]!;
+    ctrl.cb!({ type: "stopped", project_id: 8, transcript_id: tid, partial: "" });
+
+    const msgs = useChatStore.getState().messages[tid];
+    expect(msgs).toHaveLength(1); // just the user message — no dangling empty bubble
+    expect(msgs[0].role).toBe("user");
+    expect(useChatStore.getState().status[8]).toBe("idle");
+  });
+});

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * IPC contract suite (Phase 15 T6).
@@ -19,7 +20,7 @@ import { join } from "node:path";
  *     EXPECTED_UNINVOKED with a reason
  */
 
-const ROOT = join(__dirname, "..", "..");
+const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..", "..");
 
 /** Registered commands with no frontend call site — each needs a reason. */
 const EXPECTED_UNINVOKED: Record<string, string> = {

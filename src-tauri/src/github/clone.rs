@@ -25,21 +25,61 @@ fn ensure_askpass(data_dir: &Path) -> Result<PathBuf, String> {
 }
 
 fn run_git(args: &[&str], cwd: Option<&Path>, token: &str, askpass: &Path) -> Result<(), String> {
+    use std::io::Read;
+
     let mut cmd = Command::new("git");
     cmd.args(args)
         .env("GIT_ASKPASS", askpass)
         .env("GH_TOKEN", token)
-        .env("GIT_TERMINAL_PROMPT", "0");
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped());
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
-    let out = cmd.output().map_err(|e| e.to_string())?;
-    if !out.status.success() {
+    // Own process group so a timeout kill also takes out git's helpers
+    // (git-remote-https etc.), which would otherwise hold the pipes open.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+    let mut stderr_handle = child.stderr.take();
+
+    // Bounded wait: a stalled network must error out, not freeze the app.
+    let deadline = std::time::Instant::now()
+        + std::time::Duration::from_secs(crate::config::NETWORK_TIMEOUT_SECS);
+    let status = loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(status) => break status,
+            None if std::time::Instant::now() >= deadline => {
+                #[cfg(unix)]
+                unsafe {
+                    let _ = libc::killpg(child.id() as i32, libc::SIGKILL);
+                }
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "git {} timed out after {}s — check your connection and try again.",
+                    args.first().copied().unwrap_or(""),
+                    crate::config::NETWORK_TIMEOUT_SECS
+                ));
+            }
+            None => std::thread::sleep(std::time::Duration::from_millis(100)),
+        }
+    };
+    let mut stderr = String::new();
+    if let Some(handle) = stderr_handle.as_mut() {
+        let _ = handle.read_to_string(&mut stderr);
+    }
+    if !status.success() {
         // stderr can include the repo URL but never the token (askpass keeps it out).
         return Err(format!(
             "git {} failed: {}",
             args.first().copied().unwrap_or(""),
-            String::from_utf8_lossy(&out.stderr).trim()
+            stderr.trim()
         ));
     }
     Ok(())
