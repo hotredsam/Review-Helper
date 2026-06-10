@@ -11,6 +11,8 @@ export type IssueAction =
   | { kind: "close"; number: number; title: string };
 
 export interface SyncPreview {
+  /** The project this preview was computed for; the backend refuses a mismatch. */
+  project_id: number;
   issue_actions: IssueAction[];
   file_deletions: string[];
 }

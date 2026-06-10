@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 
 const ctrl = vi.hoisted(() => ({
   preview: {
+    project_id: 1,
     issue_actions: [
       { kind: "create", marker: "phase-setup", title: "Setup", body: "", state: "open", labels: ["status:todo"] },
       { kind: "close", number: 9, title: "Old phase" },

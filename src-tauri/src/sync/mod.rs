@@ -226,6 +226,10 @@ fn phase_plans(conn: &Connection, project_id: i64) -> Result<Vec<PhasePlan>, Str
 /// so the user previews ALL destructive operations before confirming.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SyncPreview {
+    /// The project this preview was computed for. Apply refuses a preview whose
+    /// id doesn't match, so a confirmed preview can never be replayed against a
+    /// different project's repo.
+    pub project_id: i64,
     pub issue_actions: Vec<IssueAction>,
     pub file_deletions: Vec<String>,
 }
@@ -256,7 +260,7 @@ pub fn preview_main_sync(conn: &Connection, project_id: i64) -> Result<SyncPrevi
         .map(|(p, _)| p)
         .filter(|p| !keep.contains(p.as_str()))
         .collect();
-    Ok(SyncPreview { issue_actions, file_deletions })
+    Ok(SyncPreview { project_id, issue_actions, file_deletions })
 }
 
 /// Apply the CONFIRMED preview: push the package, replay the exact issue actions
@@ -268,6 +272,12 @@ pub fn preview_main_sync(conn: &Connection, project_id: i64) -> Result<SyncPrevi
 /// end — never across the slow GitHub network I/O in between, so a sync (or a
 /// hung request) can't freeze the rest of the app.
 pub fn apply_main_sync(db: &crate::db::Db, project_id: i64, preview: SyncPreview) -> Result<SyncResult, String> {
+    if preview.project_id != project_id {
+        return Err(format!(
+            "Preview/project mismatch: this preview was computed for project {} but apply targets project {}. Re-run the preview.",
+            preview.project_id, project_id
+        ));
+    }
     // Read everything the network phase needs under a short lock, then drop it.
     let (owner, repo, default_branch, version, files) = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -455,5 +465,19 @@ mod tests {
         conn.execute("INSERT INTO projects (name, kind) VALUES ('Empty','new')", []).unwrap();
         let pid = conn.last_insert_rowid();
         assert!(package(&conn, pid).unwrap().is_empty());
+    }
+
+    #[test]
+    fn apply_refuses_a_preview_from_another_project() {
+        // The guard must fire before any DB read or GitHub call.
+        let db = crate::db::Db(std::sync::Mutex::new(db()));
+        let stale = SyncPreview {
+            project_id: 1,
+            issue_actions: vec![IssueAction::Close { number: 9, title: "Old".into() }],
+            file_deletions: vec![".planning/phases/phase-01.md".into()],
+        };
+        let err = apply_main_sync(&db, 2, stale).unwrap_err();
+        assert!(err.contains("mismatch"), "unexpected error: {err}");
+        assert!(err.contains("project 1") && err.contains("project 2"));
     }
 }
