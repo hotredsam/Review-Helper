@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 /**
  * IPC contract suite (Phase 15 T6).
@@ -20,7 +19,9 @@ import { fileURLToPath } from "node:url";
  *     EXPECTED_UNINVOKED with a reason
  */
 
-const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..", "..");
+// Vitest runs from the repo root; fail loudly if that ever changes.
+const ROOT = process.cwd();
+if (!existsSync(join(ROOT, "src-tauri"))) throw new Error(`ipc-contract: src-tauri not found under ${ROOT}`);
 
 /** Registered commands with no frontend call site — each needs a reason. */
 const EXPECTED_UNINVOKED: Record<string, string> = {
