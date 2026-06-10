@@ -10,6 +10,12 @@ use crate::model::{CancelToken, ModelEvent, ModelProvider, ModelRequest};
 pub(super) fn run_once(provider: &dyn ModelProvider, prompt: String, system: &str, cancel: &CancelToken) -> Result<String, String> {
     let mut req = ModelRequest::planning(prompt);
     req.system_append = Some(system.to_string());
+    run_req(provider, req, cancel)
+}
+
+/// Run a fully-built request — for callers that need tool control (the
+/// grounded tutor path vs the labeled web-fallback path).
+pub(super) fn run_req(provider: &dyn ModelProvider, req: ModelRequest, cancel: &CancelToken) -> Result<String, String> {
     let mut text = None;
     let mut failure: Option<String> = None;
     provider.run(&req, cancel, &mut |e: ModelEvent| match e {

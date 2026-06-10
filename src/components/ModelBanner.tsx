@@ -1,4 +1,5 @@
-import { AlertTriangle, RotateCw } from "lucide-react";
+import { AlertTriangle, RotateCw, TerminalSquare } from "lucide-react";
+import { claudeConnectTerminal } from "../api/model";
 import { useStatusStore } from "../store/statusStore";
 
 /**
@@ -22,6 +23,14 @@ export function ModelBanner() {
       <span className="flex-1">
         Claude not available ({reason}). Planning is paused — the app stays read-only.
       </span>
+      <button
+        type="button"
+        onClick={() => void claudeConnectTerminal().catch(() => {})}
+        className="flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-fg hover:bg-accent-hover"
+      >
+        <TerminalSquare className="h-3.5 w-3.5" />
+        Connect in Terminal
+      </button>
       <button
         type="button"
         onClick={() => void refresh()}

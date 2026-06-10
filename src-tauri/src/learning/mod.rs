@@ -16,6 +16,8 @@ pub mod materials;
 pub mod profile;
 pub mod propose;
 pub mod schedule;
+pub mod embed;
+pub mod retrieve;
 pub mod sections;
 pub mod store;
 pub mod tutor;

@@ -16,6 +16,13 @@ export interface SubjectDetail {
   source_kind: "describe" | "upload";
   source_text: string | null;
   stage: "intake" | "proposed" | "ready";
+  /** Per-subject opt-in: tutor may answer from the web (always labeled). */
+  web_fallback: boolean;
+}
+
+/** Toggle the per-subject web-fallback opt-in. */
+export function subjectSetWeb(subjectId: number, enabled: boolean): Promise<void> {
+  return invoke("subject_set_web", { subjectId, enabled });
 }
 
 /** Create a subject from a described goal or extracted upload text. */
@@ -185,14 +192,24 @@ export function learningProgress(subjectId: number): Promise<ProfileSnapshot> {
 export interface TutorMsg {
   role: "user" | "assistant";
   content: string;
+  /** "local" | "web" | "mixed" | "none" — how the reply was grounded. */
+  grounding?: string | null;
+}
+
+export interface TutorReply {
+  reply: string;
+  grounding: "local" | "web" | "mixed" | "none";
+  /** Citation labels for [n] markers (doc › section). */
+  sources: string[];
 }
 
 export function learningTutorHistory(subjectId: number): Promise<TutorMsg[]> {
   return invoke<TutorMsg[]>("learning_tutor_history", { subjectId });
 }
 
-/** Send a message to the subject's tutor; returns the reply. The tutor adapts to
- *  the bounded learner profile (mastery + pace), never a "learning style". */
-export function learningTutorSend(subjectId: number, message: string): Promise<string> {
-  return invoke<string>("learning_tutor_send", { subjectId, message });
+/** Send a message to the subject's tutor. Answers are grounded in the uploaded
+ *  materials with [n] citations; web is used only with the per-subject opt-in
+ *  and always labeled in the reply's grounding. */
+export function learningTutorSend(subjectId: number, message: string): Promise<TutorReply> {
+  return invoke<TutorReply>("learning_tutor_send", { subjectId, message });
 }

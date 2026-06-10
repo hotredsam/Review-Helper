@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Loader2, Send, Square } from "lucide-react";
 import { modelStop } from "../../api/model";
+import { Globe } from "lucide-react";
 import { type TutorMsg, learningTutorHistory, learningTutorSend } from "../../api/learning";
 import { MarkdownBlock } from "../MarkdownBlock";
 
@@ -12,6 +13,7 @@ export function TutorPane({ subjectId }: { subjectId: number }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sources, setSources] = useState<string[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,8 +39,9 @@ export function TutorPane({ subjectId }: { subjectId: number }) {
     setMessages((m) => [...m, { role: "user", content: text }]);
     setDraft("");
     try {
-      const reply = await learningTutorSend(subjectId, text);
-      setMessages((m) => [...m, { role: "assistant", content: reply }]);
+      const r = await learningTutorSend(subjectId, text);
+      setMessages((m) => [...m, { role: "assistant", content: r.reply, grounding: r.grounding }]);
+      setSources(r.sources);
     } catch (err) {
       setError(String(err));
       // Drop the optimistic user bubble and restore the draft to retry.
@@ -69,11 +72,23 @@ export function TutorPane({ subjectId }: { subjectId: number }) {
               {m.role === "user" ? (
                 <span className="whitespace-pre-wrap">{m.content}</span>
               ) : (
-                <MarkdownBlock>{m.content}</MarkdownBlock>
+                <>
+                  {(m.grounding === "web" || m.grounding === "mixed") && (
+                    <span className="mb-1 flex w-fit items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warning">
+                      <Globe className="h-3 w-3" /> Includes web results
+                    </span>
+                  )}
+                  <MarkdownBlock>{m.content}</MarkdownBlock>
+                </>
               )}
             </div>
           </div>
         ))}
+        {sources.length > 0 && (
+          <div className="ml-1 text-[11px] text-fg-subtle" aria-label="Sources">
+            Sources: {sources.map((s, i) => `[${i + 1}] ${s}`).join("  ·  ")}
+          </div>
+        )}
         {busy && (
           <div className="flex justify-start">
             <div className="flex items-center gap-2 rounded-2xl border border-border bg-bg px-3 py-2 text-sm text-fg-subtle">

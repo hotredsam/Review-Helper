@@ -15,6 +15,8 @@ use super::profile::{self, ProfileSnapshot};
 use super::propose::{self, ProposedModule};
 use super::store::{self, Subject, SubjectDetail};
 use super::tutor::{self, TutorMsg};
+use super::embed::{Embedder, OllamaEmbedder};
+use super::retrieve;
 use super::{mastery, schedule};
 use crate::db::Db;
 use crate::model::commands::provider_for;
@@ -43,7 +45,7 @@ impl LearningGate {
 /// Create a study subject from a described goal (`describe`) or extracted upload
 /// text (`upload`). Validates the title and bounds the source text.
 #[tauri::command]
-pub fn subject_create(
+pub async fn subject_create(
     db: State<'_, Db>,
     title: String,
     source_kind: String,
@@ -63,8 +65,24 @@ pub fn subject_create(
         return Err("That material is enormous (over 2M characters). Split it and upload the part you're studying.".into());
     }
     let source: String = source_text.trim().to_string();
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
-    store::create_subject(&conn, title, &source_kind, &source)
+    let id = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        store::create_subject(&conn, title, &source_kind, &source)?
+    };
+    if source_kind == "upload" && !source.is_empty() {
+        // Index for retrieval: chunk + embed lock-free, then one short
+        // transaction. Ollama down ⇒ keyword-only chunks (backfilled later).
+        let embedder = OllamaEmbedder::default();
+        let doc = retrieve::prepare_document(
+            title,
+            "upload",
+            &source,
+            embedder.available().then_some(&embedder as &dyn Embedder),
+        );
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let _ = retrieve::store_document(&conn, id, &doc);
+    }
+    Ok(id)
 }
 
 #[tauri::command]
@@ -416,6 +434,13 @@ pub fn learning_progress(db: State<'_, Db>, subject_id: i64) -> Result<ProfileSn
     profile::snapshot(&conn, subject_id)
 }
 
+/// Per-subject opt-in for labeled web fallback in the tutor.
+#[tauri::command]
+pub fn subject_set_web(db: State<'_, Db>, subject_id: i64, enabled: bool) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    store::set_web_fallback(&conn, subject_id, enabled)
+}
+
 // ---- L5: the tutor (adaptive per-subject chat) ----
 
 #[tauri::command]
@@ -428,8 +453,17 @@ pub fn learning_tutor_history(db: State<'_, Db>, subject_id: i64) -> Result<Vec<
 /// profile + prior history under a brief lock, persists the user message, then
 /// makes the model call WITHOUT the lock and persists the reply. The profile is
 /// numbers-only (no "learning style"); the model adapts difficulty from it.
+#[derive(Serialize)]
+pub struct TutorReply {
+    pub reply: String,
+    /// "local" | "web" | "mixed" | "none"
+    pub grounding: String,
+    /// Citation labels for the [n] markers (doc › section).
+    pub sources: Vec<String>,
+}
+
 #[tauri::command]
-pub async fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: String) -> Result<String, String> {
+pub async fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: String) -> Result<TutorReply, String> {
     let message = message.trim().to_string();
     if message.is_empty() {
         return Err("Type a message first.".into());
@@ -447,23 +481,87 @@ pub async fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: St
         let hist = tutor::history(&conn, subject_id)?; // prior turns (before this message)
         (subject, profile_block, hist)
     };
+
+    // ---- retrieval (RAG): embed lock-free, then search under a short lock ----
+    let query = {
+        // Deterministic follow-up rewrite: a short message borrows the previous
+        // user turn for context — no extra LLM call on the common path.
+        let prev = hist.iter().rev().find(|m| m.role == "user").map(|m| m.content.clone());
+        match prev {
+            Some(p) if message.chars().count() < 60 => format!("{p}\n{message}"),
+            _ => message.clone(),
+        }
+    };
+    let embedder = OllamaEmbedder::default();
+    let query_vec = embedder.available().then(|| embedder.embed_query(&query).ok()).flatten();
+    let retrieval = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        retrieve::search(&conn, query_vec.as_deref(), subject_id, &query)
+    };
+
     let run_key = format!("tutor:{subject_id}");
     let token = crate::model::registry::register(&run_key);
     let provider = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         provider_for(&load_model_config(&conn))
     };
-    let reply = tutor::reply(provider.as_ref(), &subject, &profile_block, &hist, &message, &token); // model call, no DB lock
+
+    // CRAG-lite: only when retrieval looks shaky does ONE cheap haiku call
+    // grade sufficiency — the confident path adds zero extra LLM calls.
+    let mut sufficient = !retrieval.hits.is_empty();
+    if sufficient && retrieval.confidence < 0.55 {
+        let summaries: String = retrieval
+            .hits
+            .iter()
+            .enumerate()
+            .map(|(i, h)| format!("[{}] {} — {}\n", i + 1, h.header, h.body.chars().take(200).collect::<String>()))
+            .collect();
+        let mut grade = crate::model::ModelRequest::grounded(format!(
+            "Question: {query}\n\nExcerpts:\n{summaries}\nCan the question be answered from these excerpts alone? Reply with exactly SUFFICIENT or INSUFFICIENT."
+        ));
+        grade.allowed_tools = vec![];
+        grade.model = Some("haiku".into());
+        if let Ok(v) = super::gen::run_req(provider.as_ref(), grade, &token) {
+            sufficient = !v.to_uppercase().contains("INSUFFICIENT");
+        }
+    }
+
+    let web_path = subject.web_fallback && (!sufficient || retrieval.hits.is_empty());
+    let (excerpts, sources) = if retrieval.hits.is_empty() {
+        (String::new(), vec![])
+    } else {
+        retrieve::excerpts_block(&retrieval.hits)
+    };
+
+    let reply = tutor::reply(
+        provider.as_ref(),
+        &subject,
+        &profile_block,
+        &hist,
+        &message,
+        &excerpts,
+        web_path,
+        &token,
+    ); // model call, no DB lock
     crate::model::registry::finish(&run_key);
     let reply = reply?;
+
+    let grounding = if web_path {
+        if retrieval.hits.is_empty() { "web" } else { "mixed" }
+    } else if retrieval.hits.is_empty() {
+        "none"
+    } else {
+        "local"
+    };
+
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     // Both sides of the turn persist atomically — never an orphaned half.
     let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-    tutor::add(&tx, subject_id, "user", &message)?;
-    tutor::add(&tx, subject_id, "assistant", &reply)?;
+    tutor::add_with_grounding(&tx, subject_id, "user", &message, "local")?;
+    tutor::add_with_grounding(&tx, subject_id, "assistant", &reply, grounding)?;
     tx.commit().map_err(|e| e.to_string())?;
-    crate::profile::record(&conn, "tutor_turn", Some(subject_id), None, &serde_json::json!({ "chars": reply.chars().count() }));
-    Ok(reply)
+    crate::profile::record(&conn, "tutor_turn", Some(subject_id), None, &serde_json::json!({ "chars": reply.chars().count(), "grounding": grounding }));
+    Ok(TutorReply { reply, grounding: grounding.to_string(), sources })
 }
 
 // ---- L6: upload ingest (PDF → text; text/markdown are read in the frontend) ----

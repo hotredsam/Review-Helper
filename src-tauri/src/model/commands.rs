@@ -50,6 +50,26 @@ pub fn model_stop(run_key: String) -> bool {
     super::registry::stop(&run_key)
 }
 
+/// Open Terminal with the Claude CLI started and a hello prompt queued — the
+/// one-press way to (re)connect Claude when the banner says it's unavailable:
+/// the CLI walks through login if needed, then answers the hello so the user
+/// sees it's alive, and the app's status probe picks it up on refresh.
+#[tauri::command]
+pub fn claude_connect_terminal() -> Result<(), String> {
+    let bin = super::claude::resolve_binary("claude");
+    let hello = "Reply with exactly: Connected - Review Helper can use this CLI now.";
+    let shell_cmd = format!("{bin} '{hello}'");
+    let escaped = shell_cmd.replace('\\', "\\\\").replace('"', "\\\"");
+    std::process::Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"Terminal\" to activate")
+        .arg("-e")
+        .arg(format!("tell application \"Terminal\" to do script \"{escaped}\""))
+        .spawn()
+        .map_err(|e| format!("Couldn't open Terminal: {e}"))?;
+    Ok(())
+}
+
 /// Whether the active provider is usable, with enough debug detail (the probe
 /// command, exit code, stderr) to explain why not. Drives the "Claude not
 /// available" banner and the debug panel.

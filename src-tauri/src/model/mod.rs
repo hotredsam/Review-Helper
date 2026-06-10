@@ -77,6 +77,15 @@ pub struct ModelRequest {
 }
 
 impl ModelRequest {
+    /// A grounded request: read/search tools only, NO web — used when the
+    /// context contains retrieved excerpts the answer must cite (web access is
+    /// a separate, labeled, opt-in path).
+    pub fn grounded(prompt: impl Into<String>) -> Self {
+        let mut req = Self::planning(prompt);
+        req.allowed_tools = vec![Tool::Read, Tool::Grep, Tool::Glob];
+        req
+    }
+
     /// A read-only planning request with the standard allow-list.
     pub fn planning(prompt: impl Into<String>) -> Self {
         ModelRequest {

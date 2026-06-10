@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { ArrowLeft, Loader2, Sparkles, Trash2 } from "lucide-react";
-import { type SubjectDetail as SubjectDetailData, subjectGet, learningPropose } from "../../api/learning";
+import { type SubjectDetail as SubjectDetailData, subjectGet, subjectSetWeb, learningPropose } from "../../api/learning";
 import { useLearningStore } from "../../store/learningStore";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { IntakePane } from "./IntakePane";
@@ -125,6 +125,18 @@ export function SubjectDetail({ subjectId, onBack }: { subjectId: number; onBack
                 {detail.source_text.length.toLocaleString()} characters ingested — the study plan covers the whole document.
               </p>
             )}
+            <label className="flex w-fit items-center gap-2 text-xs text-fg-muted">
+              <input
+                type="checkbox"
+                checked={detail.web_fallback}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setDetail((d) => (d ? { ...d, web_fallback: on } : d));
+                  void subjectSetWeb(subjectId, on).catch((err) => setError(String(err)));
+                }}
+              />
+              Use the web when my materials don't cover it (answers get a visible badge)
+            </label>
           </div>
 
           {detail.stage === "intake" && (

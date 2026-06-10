@@ -77,6 +77,9 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     if version < 8 {
         migration_step(conn, 8, migrate_v8)?;
     }
+    if version < 9 {
+        migration_step(conn, 9, migrate_v9)?;
+    }
     Ok(())
 }
 
@@ -272,6 +275,51 @@ fn migrate_v8(conn: &Connection) -> rusqlite::Result<()> {
     )
 }
 
+/// v9 (Phase 21): study-material RAG — per-document chunk store with local
+/// embeddings (BLOB; NULL = keyword-only until backfilled), an FTS5 index kept
+/// in sync by triggers, a grounding tag on tutor turns ("local"|"web"|"mixed"|
+/// "none"), and the per-subject web-fallback opt-in.
+fn migrate_v9(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS learning_documents (
+           id INTEGER PRIMARY KEY,
+           subject_id INTEGER NOT NULL REFERENCES learning_subjects(id) ON DELETE CASCADE,
+           title TEXT NOT NULL,
+           kind TEXT NOT NULL,
+           char_count INTEGER NOT NULL,
+           embed_model TEXT,
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS learning_chunks (
+           id INTEGER PRIMARY KEY,
+           document_id INTEGER NOT NULL REFERENCES learning_documents(id) ON DELETE CASCADE,
+           subject_id INTEGER NOT NULL,
+           section_path TEXT NOT NULL,
+           section_idx INTEGER NOT NULL,
+           chunk_idx INTEGER NOT NULL,
+           header TEXT NOT NULL,
+           body TEXT NOT NULL,
+           embedding BLOB
+         );
+         CREATE INDEX IF NOT EXISTS idx_learning_chunks_subject ON learning_chunks(subject_id);
+         CREATE VIRTUAL TABLE IF NOT EXISTS learning_chunks_fts USING fts5(
+           body, header, content='learning_chunks', content_rowid='id', tokenize='porter unicode61'
+         );
+         CREATE TRIGGER IF NOT EXISTS learning_chunks_ai AFTER INSERT ON learning_chunks BEGIN
+           INSERT INTO learning_chunks_fts(rowid, body, header) VALUES (new.id, new.body, new.header);
+         END;
+         CREATE TRIGGER IF NOT EXISTS learning_chunks_ad AFTER DELETE ON learning_chunks BEGIN
+           INSERT INTO learning_chunks_fts(learning_chunks_fts, rowid, body, header) VALUES ('delete', old.id, old.body, old.header);
+         END;
+         CREATE TRIGGER IF NOT EXISTS learning_chunks_au AFTER UPDATE OF body, header ON learning_chunks BEGIN
+           INSERT INTO learning_chunks_fts(learning_chunks_fts, rowid, body, header) VALUES ('delete', old.id, old.body, old.header);
+           INSERT INTO learning_chunks_fts(rowid, body, header) VALUES (new.id, new.body, new.header);
+         END;
+         ALTER TABLE learning_tutor_messages ADD COLUMN grounding TEXT NOT NULL DEFAULT 'local';
+         ALTER TABLE learning_subjects ADD COLUMN web_fallback INTEGER NOT NULL DEFAULT 0;",
+    )
+}
+
 /// Run one migration step atomically: the schema change and the version bump
 /// commit together, so a crash mid-step rolls back to a cleanly re-runnable
 /// state instead of stranding a half-applied version.
@@ -344,8 +392,9 @@ mod tests {
             )
             .unwrap();
         // schema.sql defines 28 tables (18 + the 10 learning_* tables from v6),
-        // plus v8's profile_events + profile_meta.
-        assert_eq!(count, 30);
+        // plus v8's profile tables, plus v9's documents/chunks and the five
+        // FTS5 shadow tables behind learning_chunks_fts.
+        assert_eq!(count, 37);
     }
 
     #[test]
@@ -365,7 +414,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
     }
 
     #[test]
@@ -403,7 +452,7 @@ mod tests {
         conn.execute_batch("CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT);").unwrap();
         run_migrations(&conn).expect("a partial base schema must not brick the app");
         let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert!(v >= 8);
+        assert!(v >= 9);
         // The real schema replaced the partial table (kind column exists).
         conn.execute("INSERT INTO projects (name, kind) VALUES ('ok','new')", []).unwrap();
     }

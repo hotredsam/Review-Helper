@@ -24,6 +24,9 @@ pub struct SubjectDetail {
     pub source_kind: String,
     pub source_text: Option<String>,
     pub stage: String,
+    /// Per-subject opt-in: may the tutor answer from the web (labeled) when
+    /// the materials don't cover a question?
+    pub web_fallback: bool,
 }
 
 /// Create a subject from a described goal or extracted upload text. `source_text`
@@ -65,7 +68,7 @@ pub fn list_subjects(conn: &Connection) -> Result<Vec<Subject>, String> {
 
 pub fn get_subject(conn: &Connection, id: i64) -> Result<Option<SubjectDetail>, String> {
     conn.query_row(
-        "SELECT id, title, source_kind, source_text, stage FROM learning_subjects WHERE id = ?1",
+        "SELECT id, title, source_kind, source_text, stage, web_fallback FROM learning_subjects WHERE id = ?1",
         [id],
         |r| {
             Ok(SubjectDetail {
@@ -73,8 +76,7 @@ pub fn get_subject(conn: &Connection, id: i64) -> Result<Option<SubjectDetail>, 
                 title: r.get(1)?,
                 source_kind: r.get(2)?,
                 source_text: r.get(3)?,
-                stage: r.get(4)?,
-            })
+                stage: r.get(4)?, web_fallback: r.get::<_, i64>(5)? != 0 })
         },
     )
     .optional()
@@ -149,4 +151,14 @@ mod tests {
         delete_subject(&conn, id).unwrap();
         assert!(list_subjects(&conn).unwrap().is_empty());
     }
+}
+
+/// Toggle the per-subject web-fallback opt-in.
+pub fn set_web_fallback(conn: &Connection, id: i64, on: bool) -> Result<(), String> {
+    conn.execute(
+        "UPDATE learning_subjects SET web_fallback = ?1 WHERE id = ?2",
+        rusqlite::params![if on { 1 } else { 0 }, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
 }

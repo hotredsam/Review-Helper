@@ -30,6 +30,12 @@ export function modelStop(runKey: string): Promise<boolean> {
   return invoke<boolean>("model_stop", { runKey });
 }
 
+/** Open Terminal with `claude` running and a hello prompt queued — the
+ *  one-press way to (re)connect when the banner says Claude is unavailable. */
+export function claudeConnectTerminal(): Promise<void> {
+  return invoke("claude_connect_terminal");
+}
+
 /** Subscribe to streamed model events. Returns an unlisten function. */
 export function onModelEvent(handler: (e: ModelEvent) => void): Promise<UnlistenFn> {
   return listen<ModelEvent>("model-event", (evt) => handler(evt.payload));

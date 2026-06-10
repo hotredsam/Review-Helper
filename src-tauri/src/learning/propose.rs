@@ -272,6 +272,7 @@ mod tests {
             source_kind: "upload".into(),
             source_text: Some(source.to_string()),
             stage: "intake".into(),
+            web_fallback: false,
         }
     }
 

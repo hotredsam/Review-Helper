@@ -4,7 +4,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 
 ## Current state
 
-**Phases 1–14 and the A–H overhaul are done. Phases 15–19 (the audit overhaul) are in progress, then 20–21 (adaptive profile, study RAG).** They come from the 2026-06-09 verified bug audit — 52 confirmed findings, full evidence in `.planning/AUDIT-2026-06-09.md`. Exit bar for 15–19: every fixed finding gets a regression test that fails on the old code, and the Phase 15 IPC contract suite stays green. The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
+**Everything through Phase 21 is done** — the 2026-06-09 audit overhaul (15–19) plus the adaptive profile (20) and study-material RAG (21). They come from the 2026-06-09 verified bug audit — 52 confirmed findings, full evidence in `.planning/AUDIT-2026-06-09.md`. Exit bar for 15–19: every fixed finding gets a regression test that fails on the old code, and the Phase 15 IPC contract suite stays green. The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
 
 ## How to execute
 
@@ -54,7 +54,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 | 18 | `phases/phase-18-polish-sweep.md` — polish sweep (races, UX, a11y, hygiene) | done |
 | 19 | `phases/phase-19-voice-ingest.md` — live local Whisper mic + chunked document ingest | done |
 | 20 | `phases/phase-20-adaptive-profile.md` — adaptive self-learning profile (MD files + cheap reflection) | done |
-| 21 | `phases/phase-21-study-rag.md` — study-material RAG (hybrid retrieval, citations, labeled web fallback) | planned |
+| 21 | `phases/phase-21-study-rag.md` — study-material RAG (hybrid retrieval, citations, labeled web fallback) | done |
 
 Phases 1–13 build to production-ready; 14 is a stub. 15–19 fix the 2026-06-09 audit findings; 20–21 are researched feature phases (adaptive profile, study RAG). Order is by dependency — see each file's `Depends on`.
 
