@@ -87,8 +87,8 @@ pub fn notes_get(conn: &Connection, module_id: i64) -> Result<Option<String>, St
     .map_err(|e| e.to_string())
 }
 
-pub(super) fn fetch_notes(provider: &dyn ModelProvider, subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<String, String> {
-    let body = run_once(provider, ground(subject, m), NOTES_SYSTEM, cancel)?;
+pub(super) fn fetch_notes(provider: &dyn ModelProvider, subject: &SubjectDetail, m: &ModuleRow, learner_profile: &str, cancel: &CancelToken) -> Result<String, String> {
+    let body = run_once(provider, ground(subject, m), &format!("{NOTES_SYSTEM}{learner_profile}"), cancel)?;
     let body = body.trim();
     if body.is_empty() {
         return Err("The notes came back empty.".into());
@@ -137,8 +137,8 @@ pub fn flashcards_list(conn: &Connection, module_id: i64) -> Result<Vec<Flashcar
         .map_err(|e| e.to_string())
 }
 
-pub(super) fn fetch_flashcards(provider: &dyn ModelProvider, subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<Vec<(String, String)>, String> {
-    let text = run_once(provider, ground(subject, m), FLASH_SYSTEM, cancel)?;
+pub(super) fn fetch_flashcards(provider: &dyn ModelProvider, subject: &SubjectDetail, m: &ModuleRow, learner_profile: &str, cancel: &CancelToken) -> Result<Vec<(String, String)>, String> {
+    let text = run_once(provider, ground(subject, m), &format!("{FLASH_SYSTEM}{learner_profile}"), cancel)?;
     let json = extract_json(&text)?;
     let set: CardSet = serde_json::from_str(json).map_err(|_| "The flashcards were malformed.".to_string())?;
     let cards: Vec<(String, String)> = set
@@ -278,8 +278,8 @@ pub fn quiz_list(conn: &Connection, module_id: i64) -> Result<Vec<QuizQuestion>,
         .collect())
 }
 
-pub(super) fn fetch_quiz(provider: &dyn ModelProvider, subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<Vec<ParsedQuiz>, String> {
-    let text = run_once(provider, ground(subject, m), QUIZ_SYSTEM, cancel)?;
+pub(super) fn fetch_quiz(provider: &dyn ModelProvider, subject: &SubjectDetail, m: &ModuleRow, learner_profile: &str, cancel: &CancelToken) -> Result<Vec<ParsedQuiz>, String> {
+    let text = run_once(provider, ground(subject, m), &format!("{QUIZ_SYSTEM}{learner_profile}"), cancel)?;
     let json = extract_json(&text)?;
     let set: QuizSet = serde_json::from_str(json).map_err(|_| "The quiz was malformed.".to_string())?;
     let questions: Vec<ParsedQuiz> = set

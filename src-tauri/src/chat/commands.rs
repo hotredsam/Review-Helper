@@ -77,9 +77,11 @@ pub fn chat_send(
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         let project = projects::get(&conn, project_id)?.ok_or("Project not found.")?;
         let config = load_model_config(&conn);
-        let context = ProjectContext::assemble(&conn, project_id)
-            .map(|c| c.to_prompt())
-            .unwrap_or_default();
+        let context = format!(
+            "{}{}",
+            ProjectContext::assemble(&conn, project_id).map(|c| c.to_prompt()).unwrap_or_default(),
+            crate::profile::excerpt(&conn, crate::profile::REVIEW_FILE),
+        );
         store::set_title_if_empty(&conn, transcript_id, &message)?;
         let history = store::history_context(&conn, project_id, transcript_id)?;
         store::add_message(&conn, transcript_id, "user", &message)?;

@@ -156,9 +156,11 @@ pub(super) fn fetch_modules(
     provider: &dyn ModelProvider,
     subject: &SubjectDetail,
     intake: &[IntakeItem],
+    learner_profile: &str,
     cancel: &CancelToken,
     mut progress: impl FnMut(usize, usize),
 ) -> Result<Vec<SectionedModule>, String> {
+    let system = format!("{PROPOSE_SYSTEM}{learner_profile}");
     let source = subject.source_text.as_deref().unwrap_or("");
     let sections = super::sections::split_sections(source, super::sections::SECTION_TARGET_CHARS);
 
@@ -169,7 +171,7 @@ pub(super) fn fetch_modules(
             fence_safe(if source.is_empty() { "(none)" } else { source }),
             intake_block(intake),
         );
-        let text = run_once(provider, prompt, PROPOSE_SYSTEM, cancel)?;
+        let text = run_once(provider, prompt, &system, cancel)?;
         let modules = parse_proposal(&text, 8)?;
         if modules.is_empty() {
             return Err("No study modules were proposed.".into());
@@ -195,7 +197,7 @@ pub(super) fn fetch_modules(
             fence_safe(&section.body),
             intake_block(intake),
         );
-        let text = run_once(provider, prompt, PROPOSE_SYSTEM, cancel)?;
+        let text = run_once(provider, prompt, &system, cancel)?;
         for m in parse_proposal(&text, 3)? {
             // Merge pass: overlapping sections often re-propose the same topic.
             if seen.insert(norm_title(&m.title)) {
@@ -279,7 +281,7 @@ mod tests {
             calls: Default::default(),
             json: r#"{"modules":[{"kind":"notes","title":"Cells","summary":"s","skill":"cells"}]}"#,
         };
-        let out = fetch_modules(&p, &subject_with_source("short doc"), &[], &CancelToken::new(), |_, _| {}).unwrap();
+        let out = fetch_modules(&p, &subject_with_source("short doc"), &[], "", &CancelToken::new(), |_, _| {}).unwrap();
         assert_eq!(p.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].excerpt.as_deref(), Some("short doc"));
@@ -298,7 +300,7 @@ mod tests {
             json: r#"{"modules":[{"kind":"quiz","title":"Photosynthesis","summary":"s","skill":"photo"}]}"#,
         };
         let mut progress: Vec<(usize, usize)> = Vec::new();
-        let out = fetch_modules(&p, &subject_with_source(&doc), &[], &CancelToken::new(), |d, t| progress.push((d, t))).unwrap();
+        let out = fetch_modules(&p, &subject_with_source(&doc), &[], "", &CancelToken::new(), |d, t| progress.push((d, t))).unwrap();
 
         let calls = p.calls.load(std::sync::atomic::Ordering::SeqCst);
         assert!(calls >= 2, "a large doc must be proposed per section, got {calls} call(s)");

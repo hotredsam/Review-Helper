@@ -53,7 +53,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 | 17 | `phases/phase-17-settings-truth.md` — settings truth & data integrity (provider, FSRS, transactions) | done |
 | 18 | `phases/phase-18-polish-sweep.md` — polish sweep (races, UX, a11y, hygiene) | done |
 | 19 | `phases/phase-19-voice-ingest.md` — live local Whisper mic + chunked document ingest | done |
-| 20 | `phases/phase-20-adaptive-profile.md` — adaptive self-learning profile (MD files + cheap reflection) | planned |
+| 20 | `phases/phase-20-adaptive-profile.md` — adaptive self-learning profile (MD files + cheap reflection) | done |
 | 21 | `phases/phase-21-study-rag.md` — study-material RAG (hybrid retrieval, citations, labeled web fallback) | planned |
 
 Phases 1–13 build to production-ready; 14 is a stub. 15–19 fix the 2026-06-09 audit findings; 20–21 are researched feature phases (adaptive profile, study RAG). Order is by dependency — see each file's `Depends on`.

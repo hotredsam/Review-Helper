@@ -218,6 +218,8 @@ pub async fn card_chat_send(
     // Gather the card content + history, persist the user message, then call out.
     let (what, why, history) = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
+        // Asking about a card = the prior explanation didn't fully land.
+        crate::profile::record(&conn, "explain_reask", None, Some(project_id), &serde_json::json!({}));
         let card = get_card(&conn, &term)?;
         let (what, why) = card
             .map(|c| (c.what_md.unwrap_or_default(), c.why_md.unwrap_or_default()))

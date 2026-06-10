@@ -124,7 +124,7 @@ fn store_kickoff_answer(conn: &Connection, project_id: i64, description: &str) -
 
 /// Run a plan-generation request to completion: stream progress, parse the
 /// result, and persist it. Shared by analyze + kickoff.
-fn generate_plan(app: AppHandle, project_id: i64, req: ModelRequest, source: &str) {
+fn generate_plan(app: AppHandle, project_id: i64, mut req: ModelRequest, source: &str) {
     let emit = |ev: AnalysisEvent| {
         let _ = app.emit("analysis-event", &ev);
     };
@@ -146,10 +146,19 @@ fn generate_plan(app: AppHandle, project_id: i64, req: ModelRequest, source: &st
     let token = crate::model::registry::register(&run_key);
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;
-    let config = match app.state::<crate::db::Db>().0.lock() {
-        Ok(conn) => crate::settings::load_model_config(&conn),
-        Err(_) => crate::settings::ModelConfig::default(),
+    let (config, review_profile) = match app.state::<crate::db::Db>().0.lock() {
+        Ok(conn) => (
+            crate::settings::load_model_config(&conn),
+            crate::profile::excerpt(&conn, crate::profile::REVIEW_FILE),
+        ),
+        Err(_) => (crate::settings::ModelConfig::default(), String::new()),
     };
+    if !review_profile.is_empty() {
+        match req.system_append.as_mut() {
+            Some(sys) => sys.push_str(&review_profile),
+            None => req.system_append = Some(review_profile.clone()),
+        }
+    }
     crate::model::commands::provider_for(&config).run(&req, &token, &mut |event: ModelEvent| match event {
         ModelEvent::ToolUse { name } => emit(AnalysisEvent::Tool { project_id, name }),
         ModelEvent::Completed { text, .. } => final_text = Some(text),
@@ -290,7 +299,7 @@ pub fn update_plan(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Result
 
 /// Like generate_plan, but after saving the new version it carries completion
 /// forward and marks the incorporated features in_plan.
-fn run_merge(app: AppHandle, project_id: i64, req: ModelRequest, feature_ids: Vec<i64>) {
+fn run_merge(app: AppHandle, project_id: i64, mut req: ModelRequest, feature_ids: Vec<i64>) {
     let emit = |ev: AnalysisEvent| {
         let _ = app.emit("analysis-event", &ev);
     };
@@ -312,10 +321,19 @@ fn run_merge(app: AppHandle, project_id: i64, req: ModelRequest, feature_ids: Ve
     let token = crate::model::registry::register(&run_key);
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;
-    let config = match app.state::<crate::db::Db>().0.lock() {
-        Ok(conn) => crate::settings::load_model_config(&conn),
-        Err(_) => crate::settings::ModelConfig::default(),
+    let (config, review_profile) = match app.state::<crate::db::Db>().0.lock() {
+        Ok(conn) => (
+            crate::settings::load_model_config(&conn),
+            crate::profile::excerpt(&conn, crate::profile::REVIEW_FILE),
+        ),
+        Err(_) => (crate::settings::ModelConfig::default(), String::new()),
     };
+    if !review_profile.is_empty() {
+        match req.system_append.as_mut() {
+            Some(sys) => sys.push_str(&review_profile),
+            None => req.system_append = Some(review_profile.clone()),
+        }
+    }
     crate::model::commands::provider_for(&config).run(&req, &token, &mut |event: ModelEvent| match event {
         ModelEvent::ToolUse { name } => emit(AnalysisEvent::Tool { project_id, name }),
         ModelEvent::Completed { text, .. } => final_text = Some(text),

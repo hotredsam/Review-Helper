@@ -19,13 +19,21 @@ pub fn suggestions_list(
 #[tauri::command]
 pub fn suggestion_approve(db: State<'_, Db>, project_id: i64, suggestion_id: i64) -> Result<(), String> {
     let mut conn = db.0.lock().map_err(|e| e.to_string())?;
-    approve(&mut conn, project_id, suggestion_id)
+    let out = approve(&mut conn, project_id, suggestion_id);
+    if out.is_ok() {
+        crate::profile::record(&conn, "suggestion", None, Some(project_id), &serde_json::json!({ "verdict": "approved" }));
+    }
+    out
 }
 
 #[tauri::command]
 pub fn suggestion_dismiss(db: State<'_, Db>, project_id: i64, suggestion_id: i64) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
-    dismiss(&conn, project_id, suggestion_id)
+    let out = dismiss(&conn, project_id, suggestion_id);
+    if out.is_ok() {
+        crate::profile::record(&conn, "suggestion", None, Some(project_id), &serde_json::json!({ "verdict": "dismissed" }));
+    }
+    out
 }
 
 #[tauri::command]

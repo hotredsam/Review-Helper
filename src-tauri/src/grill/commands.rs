@@ -109,10 +109,19 @@ fn run_grill(app: AppHandle, project_id: i64, depth: i64) {
     let token = crate::model::registry::register(&run_key);
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;
-    let config = match app.state::<crate::db::Db>().0.lock() {
-        Ok(conn) => crate::settings::load_model_config(&conn),
-        Err(_) => crate::settings::ModelConfig::default(),
+    let (config, review_profile) = match app.state::<crate::db::Db>().0.lock() {
+        Ok(conn) => (
+            crate::settings::load_model_config(&conn),
+            crate::profile::excerpt(&conn, crate::profile::REVIEW_FILE),
+        ),
+        Err(_) => (crate::settings::ModelConfig::default(), String::new()),
     };
+    if !review_profile.is_empty() {
+        match req.system_append.as_mut() {
+            Some(sys) => sys.push_str(&review_profile),
+            None => req.system_append = Some(review_profile.clone()),
+        }
+    }
     crate::model::commands::provider_for(&config).run(&req, &token, &mut |event: ModelEvent| match event {
         ModelEvent::ToolUse { name } => emit(GrillEvent::Tool { project_id, name }),
         ModelEvent::Completed { text, .. } => final_text = Some(text),
@@ -166,7 +175,11 @@ pub fn grill_answer(
     body: String,
 ) -> Result<(), String> {
     let mut conn = db.0.lock().map_err(|e| e.to_string())?;
-    super::answer_question(&mut conn, project_id, question_id, &body, "typed")
+    let out = super::answer_question(&mut conn, project_id, question_id, &body, "typed");
+    if out.is_ok() {
+        crate::profile::record(&conn, "grill_answer", None, Some(project_id), &serde_json::json!({ "chars": body.chars().count() }));
+    }
+    out
 }
 
 /// Write a chat resolution back into the card (the "Let's chat about this"

@@ -23,6 +23,10 @@ pub enum AssessmentEvent {
 
 #[tauri::command]
 pub fn assess_project(app: AppHandle, db: State<'_, Db>, project_id: i64) -> Result<(), String> {
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        crate::profile::record(&conn, "assess_run", None, Some(project_id), &serde_json::json!({}));
+    }
     let project = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         projects::get(&conn, project_id)?.ok_or("Project not found.")?
@@ -65,10 +69,19 @@ fn run_assessment(app: AppHandle, project_id: i64, clone_path: String) {
     let token = crate::model::registry::register(&run_key);
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;
-    let config = match app.state::<crate::db::Db>().0.lock() {
-        Ok(conn) => crate::settings::load_model_config(&conn),
-        Err(_) => crate::settings::ModelConfig::default(),
+    let (config, review_profile) = match app.state::<crate::db::Db>().0.lock() {
+        Ok(conn) => (
+            crate::settings::load_model_config(&conn),
+            crate::profile::excerpt(&conn, crate::profile::REVIEW_FILE),
+        ),
+        Err(_) => (crate::settings::ModelConfig::default(), String::new()),
     };
+    if !review_profile.is_empty() {
+        match req.system_append.as_mut() {
+            Some(sys) => sys.push_str(&review_profile),
+            None => req.system_append = Some(review_profile.clone()),
+        }
+    }
     crate::model::commands::provider_for(&config).run(&req, &token, &mut |event: ModelEvent| match event {
         ModelEvent::ToolUse { name } => emit(AssessmentEvent::Tool { project_id, name }),
         ModelEvent::Completed { text, .. } => final_text = Some(text),

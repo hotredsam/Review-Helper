@@ -7,6 +7,7 @@ import { Tour, tourSeen } from "./components/Tour";
 import { useProjectStore } from "./store/projectStore";
 import { useStatusStore } from "./store/statusStore";
 import { useUiStore } from "./store/uiStore";
+import { profileReflect } from "./api/profile";
 
 /**
  * App shell: loads projects from the database on mount, then renders the
@@ -21,6 +22,13 @@ function App() {
   const refreshStatus = useStatusStore((s) => s.refresh);
   const tourOpen = useUiStore((s) => s.tourOpen);
   const setTourOpen = useUiStore((s) => s.setTourOpen);
+  const appMode = useUiStore((s) => s.appMode);
+
+  // Session-boundary reflection: cheap to call (backend gates on 15+ new
+  // signals); fired on launch and whenever the user switches modes.
+  useEffect(() => {
+    void profileReflect().catch(() => {});
+  }, [appMode]);
 
   useEffect(() => {
     load();

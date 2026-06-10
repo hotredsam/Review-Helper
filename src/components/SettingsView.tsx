@@ -1,6 +1,7 @@
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { ModelConsole } from "./ModelConsole";
 import { ProviderSettings } from "./ProviderSettings";
+import { ProfileSettings } from "./ProfileSettings";
 import { ModelDebug } from "./ModelDebug";
 import { GithubConnect } from "./GithubConnect";
 import { useUiStore } from "../store/uiStore";
@@ -55,6 +56,16 @@ export function SettingsView() {
         <ProviderSettings />
         <ModelConsole />
         <ModelDebug />
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-fg">Your profile</h2>
+          <p className="text-sm text-fg-muted">
+            Two Markdown files the app maintains from measured behavior — open, edit, or switch them off.
+          </p>
+        </div>
+        <ProfileSettings />
       </section>
     </div>
   );

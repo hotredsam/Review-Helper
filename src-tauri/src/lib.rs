@@ -10,6 +10,7 @@ pub mod context;
 mod decisions;
 mod features;
 mod config;
+mod profile;
 mod transcribe;
 mod db;
 mod github;
@@ -48,6 +49,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            if let Ok(dir) = app.path().app_data_dir() {
+                crate::profile::init(dir.join("profile"));
+            }
             // Open + migrate the SQLite database, then hand the connection to
             // Tauri's managed state so every command can reach it. A failure
             // here (corrupt file, unwritable app-data dir, full disk) is fatal,
@@ -80,6 +84,11 @@ pub fn run() {
             model::commands::model_stop,
             settings::get_model_config,
             settings::set_model_config,
+            profile::commands::profile_get,
+            profile::commands::profile_set_enabled,
+            profile::commands::profile_save_notes,
+            profile::commands::profile_reset,
+            profile::commands::profile_reflect,
             github::commands::github_status,
             github::commands::github_connect_gh,
             github::commands::github_sign_out,

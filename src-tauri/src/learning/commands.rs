@@ -182,7 +182,11 @@ pub async fn learning_propose(
             serde_json::json!({ "subject_id": subject_id, "stage": "propose", "done": done, "total": total }),
         );
     };
-    let modules = propose::fetch_modules(provider.as_ref(), &subject, &intake, &token, emit_progress); // model call, no DB lock
+    let learner = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        crate::profile::excerpt(&conn, crate::profile::LEARNER_FILE)
+    };
+    let modules = propose::fetch_modules(provider.as_ref(), &subject, &intake, &learner, &token, emit_progress); // model call, no DB lock
     crate::model::registry::finish(&run_key);
     let modules = modules?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -250,7 +254,11 @@ pub async fn learning_notes(db: State<'_, Db>, gate: State<'_, LearningGate>, mo
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         provider_for(&load_model_config(&conn))
     };
-    let body = materials::fetch_notes(provider.as_ref(), &subject, &m, &token); // model call, no DB lock
+    let learner = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        crate::profile::excerpt(&conn, crate::profile::LEARNER_FILE)
+    };
+    let body = materials::fetch_notes(provider.as_ref(), &subject, &m, &learner, &token); // model call, no DB lock
     crate::model::registry::finish(&run_key);
     let body = body?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -285,7 +293,11 @@ pub async fn learning_flashcards(db: State<'_, Db>, gate: State<'_, LearningGate
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         provider_for(&load_model_config(&conn))
     };
-    let cards = materials::fetch_flashcards(provider.as_ref(), &subject, &m, &token); // model call, no DB lock
+    let learner = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        crate::profile::excerpt(&conn, crate::profile::LEARNER_FILE)
+    };
+    let cards = materials::fetch_flashcards(provider.as_ref(), &subject, &m, &learner, &token); // model call, no DB lock
     crate::model::registry::finish(&run_key);
     let cards = cards?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -320,7 +332,11 @@ pub async fn learning_quiz(db: State<'_, Db>, gate: State<'_, LearningGate>, mod
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         provider_for(&load_model_config(&conn))
     };
-    let questions = materials::fetch_quiz(provider.as_ref(), &subject, &m, &token); // model call, no DB lock
+    let learner = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        crate::profile::excerpt(&conn, crate::profile::LEARNER_FILE)
+    };
+    let questions = materials::fetch_quiz(provider.as_ref(), &subject, &m, &learner, &token); // model call, no DB lock
     crate::model::registry::finish(&run_key);
     let questions = questions?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -350,6 +366,7 @@ pub fn learning_flashcard_grade(db: State<'_, Db>, flashcard_id: i64, rating: i6
     let g = schedule::grade(&conn, flashcard_id, rating)?;
     let _ = mastery::update(&conn, g.subject_id, &g.skill, g.correct);
     profile::record_flashcard_review(&conn, g.subject_id)?;
+    crate::profile::record(&conn, "flashcard_grade", Some(g.subject_id), None, &serde_json::json!({ "rating": rating }));
     Ok(g.due)
 }
 
@@ -387,6 +404,7 @@ pub fn learning_quiz_answer(
     .map_err(|e| e.to_string())?;
     let p_known = mastery::update(&conn, subject_id, skill.as_deref().unwrap_or(""), correct)?;
     profile::record_attempt(&conn, subject_id, correct, latency_ms.unwrap_or(0))?;
+    crate::profile::record(&conn, "quiz_answer", Some(subject_id), None, &serde_json::json!({ "correct": correct, "latency_ms": latency_ms.unwrap_or(0) }));
     Ok(QuizResult { correct, answer_idx, explanation, p_known })
 }
 
@@ -424,7 +442,8 @@ pub async fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: St
     let (subject, profile_block, hist) = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         let subject = store::get_subject(&conn, subject_id)?.ok_or("Subject not found.")?;
-        let profile_block = profile::snapshot_prompt(&conn, subject_id)?;
+        let mut profile_block = profile::snapshot_prompt(&conn, subject_id)?;
+        profile_block.push_str(&crate::profile::excerpt(&conn, crate::profile::LEARNER_FILE));
         let hist = tutor::history(&conn, subject_id)?; // prior turns (before this message)
         (subject, profile_block, hist)
     };
@@ -443,6 +462,7 @@ pub async fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: St
     tutor::add(&tx, subject_id, "user", &message)?;
     tutor::add(&tx, subject_id, "assistant", &reply)?;
     tx.commit().map_err(|e| e.to_string())?;
+    crate::profile::record(&conn, "tutor_turn", Some(subject_id), None, &serde_json::json!({ "chars": reply.chars().count() }));
     Ok(reply)
 }
 

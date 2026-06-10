@@ -64,3 +64,42 @@ describe("ProviderSettings stub notice (Phase 17)", () => {
     expect(screen.getByRole("note")).toHaveTextContent(/nothing spends Claude credits/i);
   });
 });
+
+vi.mock("../api/profile", () => ({
+  profileGet: vi.fn(async () => ({
+    enabled: true,
+    unreflected_events: 7,
+    files: [
+      { name: "learner-profile.md", content: "# How you learn\nstuff\n## Your notes (never auto-edited)\nmy note" },
+      { name: "review-preferences.md", content: "# Reviews\nstuff\n## Your notes (never auto-edited)\n" },
+    ],
+  })),
+  profileSetEnabled: vi.fn(async () => {}),
+  profileSaveNotes: vi.fn(async () => {}),
+  profileReset: vi.fn(async () => {}),
+  profileReflect: vi.fn(async () => "skipped"),
+}));
+
+describe("ProfileSettings (Phase 20)", () => {
+  it("renders both profile files, the toggle, and preserved notes", async () => {
+    const { ProfileSettings } = await import("../components/ProfileSettings");
+    const { render, screen } = await import("@testing-library/react");
+    render(<ProfileSettings />);
+    expect(await screen.findByText(/How you learn \(Learning mode\)/)).toBeTruthy();
+    expect(screen.getByText(/How you like reviews/)).toBeTruthy();
+    expect(screen.getByLabelText("Adaptive profile enabled")).toBeChecked();
+    expect(screen.getByText(/7 new signals/)).toBeTruthy();
+    expect(screen.getByDisplayValue("my note")).toBeTruthy();
+  });
+
+  it("toggling off persists through the API", async () => {
+    const { ProfileSettings } = await import("../components/ProfileSettings");
+    const { profileSetEnabled } = await import("../api/profile");
+    const { render, screen } = await import("@testing-library/react");
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    render(<ProfileSettings />);
+    await user.click(await screen.findByLabelText("Adaptive profile enabled"));
+    expect(vi.mocked(profileSetEnabled)).toHaveBeenCalledWith(false);
+  });
+});

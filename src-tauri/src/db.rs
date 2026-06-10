@@ -74,6 +74,9 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     if version < 7 {
         migration_step(conn, 7, migrate_v7)?;
     }
+    if version < 8 {
+        migration_step(conn, 8, migrate_v8)?;
+    }
     Ok(())
 }
 
@@ -253,6 +256,22 @@ fn migrate_v7(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch("ALTER TABLE learning_modules ADD COLUMN source_excerpt TEXT;")
 }
 
+/// v8 (Phase 20): the adaptive profile's deterministic signal log + metadata.
+fn migrate_v8(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS profile_events (
+           id INTEGER PRIMARY KEY,
+           kind TEXT NOT NULL,
+           subject_id INTEGER,
+           project_id INTEGER,
+           payload TEXT,
+           created_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE INDEX IF NOT EXISTS idx_profile_events_kind ON profile_events(kind);
+         CREATE TABLE IF NOT EXISTS profile_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+    )
+}
+
 /// Run one migration step atomically: the schema change and the version bump
 /// commit together, so a crash mid-step rolls back to a cleanly re-runnable
 /// state instead of stranding a half-applied version.
@@ -324,8 +343,9 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        // schema.sql defines 28 tables (18 + the 10 learning_* tables from v6).
-        assert_eq!(count, 28);
+        // schema.sql defines 28 tables (18 + the 10 learning_* tables from v6),
+        // plus v8's profile_events + profile_meta.
+        assert_eq!(count, 30);
     }
 
     #[test]
@@ -345,7 +365,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
     }
 
     #[test]
@@ -383,7 +403,7 @@ mod tests {
         conn.execute_batch("CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT);").unwrap();
         run_migrations(&conn).expect("a partial base schema must not brick the app");
         let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert!(v >= 7);
+        assert!(v >= 8);
         // The real schema replaced the partial table (kind column exists).
         conn.execute("INSERT INTO projects (name, kind) VALUES ('ok','new')", []).unwrap();
     }
