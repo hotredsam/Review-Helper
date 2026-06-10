@@ -177,8 +177,17 @@ pub fn rename_project(db: State<Db>, id: i64, name: String) -> Result<Project, S
 }
 
 #[tauri::command]
-pub fn delete_project(db: State<Db>, id: i64) -> Result<bool, String> {
-    with_conn(&db, |c| delete(c, id))
+pub fn delete_project(app: tauri::AppHandle, db: State<Db>, id: i64) -> Result<bool, String> {
+    let removed = with_conn(&db, |c| delete(c, id))?;
+    if removed {
+        // The shallow-clone cache is per-project state — deleting the project
+        // without it would leak a multi-MB directory on disk forever.
+        use tauri::Manager;
+        if let Ok(dir) = app.path().app_data_dir() {
+            let _ = std::fs::remove_dir_all(dir.join("clones").join(id.to_string()));
+        }
+    }
+    Ok(removed)
 }
 
 #[cfg(test)]

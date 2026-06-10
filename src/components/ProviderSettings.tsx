@@ -5,6 +5,7 @@ import {
   type ModelConfig,
   type ProviderKind,
 } from "../api/settings";
+import { useUiStore } from "../store/uiStore";
 
 /**
  * Model-provider configuration. Claude is the default and routes real calls;
@@ -13,7 +14,8 @@ import {
  */
 export function ProviderSettings() {
   const [config, setConfig] = useState<ModelConfig | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null); // load failure only
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     getModelConfig()
@@ -25,7 +27,15 @@ export function ProviderSettings() {
     if (!config) return;
     const next = { ...config, ...patch };
     setConfig(next);
-    setModelConfig(next).catch((e) => setError(String(e)));
+    setSaveError(null);
+    setModelConfig(next)
+      .then(() => useUiStore.getState().setNotice("Model settings saved."))
+      .catch((e) => {
+        // The save failed: say so accurately, keep the panel usable, and
+        // re-sync from the backend so the screen matches what's persisted.
+        setSaveError(String(e));
+        getModelConfig().then(setConfig).catch(() => {});
+      });
   };
 
   if (error) {
@@ -41,6 +51,11 @@ export function ProviderSettings() {
 
   return (
     <div className="space-y-4">
+      {saveError && (
+        <p className="text-sm text-danger" role="alert">
+          Couldn't save model settings: {saveError}
+        </p>
+      )}
       {config.provider === "local" && (
         <p className="rounded-md border border-border bg-surface-2 px-3 py-2 text-xs text-fg-muted" role="note">
           The local provider is a stub: chat and every generator (plan, grill, learning, cards, assess)

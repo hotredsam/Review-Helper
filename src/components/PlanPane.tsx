@@ -203,8 +203,8 @@ export function PlanPane({ project }: { project: Project }) {
       {plan.decisions.length > 0 && (
         <section className="space-y-1.5">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">Decisions</h2>
-          {plan.decisions.map((d, i) => (
-            <div key={i} className="text-sm">
+          {plan.decisions.map((d) => (
+            <div key={d.topic} className="text-sm">
               <span className="font-medium text-fg">{d.topic}:</span>{" "}
               <span className="text-fg-muted">{d.choice}</span>
               {d.rationale && <span className="text-fg-subtle"> — {d.rationale}</span>}

@@ -9,8 +9,7 @@ use super::{
     AssessmentView, ASSESS_SYSTEM,
 };
 use crate::db::Db;
-use crate::model::claude::ClaudeCodeProvider;
-use crate::model::{ModelEvent, ModelProvider, ModelRequest};
+use crate::model::{ModelEvent, ModelRequest};
 use crate::projects;
 
 #[derive(Serialize, Clone)]
@@ -123,6 +122,8 @@ pub fn get_assessment(db: State<'_, Db>, project_id: i64) -> Result<Option<Asses
 
 #[cfg(test)]
 mod tests {
+    use crate::model::claude::ClaudeCodeProvider;
+    use crate::model::ModelProvider;
     use super::*;
 
     #[test]

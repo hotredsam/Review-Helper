@@ -25,8 +25,6 @@ if (!existsSync(join(ROOT, "src-tauri"))) throw new Error(`ipc-contract: src-tau
 
 /** Registered commands with no frontend call site — each needs a reason. */
 const EXPECTED_UNINVOKED: Record<string, string> = {
-  github_device_start: "device flow built in Phase 3, gh-token path chosen instead — resolve in Phase 18 T5",
-  github_device_poll: "device flow built in Phase 3, gh-token path chosen instead — resolve in Phase 18 T5",
   app_info: "build-health probe exercised by cargo test + CI, deliberately not part of the UI",
 };
 

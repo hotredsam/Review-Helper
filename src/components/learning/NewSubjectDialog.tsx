@@ -53,8 +53,14 @@ export function NewSubjectDialog({ open, onClose }: { open: boolean; onClose: ()
     try {
       if (isPdf) {
         setExtracting(true);
-        const buf = await file.arrayBuffer();
-        const text = await learningExtractPdf(Array.from(new Uint8Array(buf)));
+        // Native base64 via FileReader — never a JS number array through IPC.
+        const b64 = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result).split(",", 2)[1] ?? "");
+          r.onerror = () => reject(r.error ?? new Error("Couldn't read the file."));
+          r.readAsDataURL(file);
+        });
+        const text = await learningExtractPdf(b64);
         setUploadText(text);
         setNameDefault();
       } else {

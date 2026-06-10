@@ -23,6 +23,17 @@ export function WhyExplain({ term }: { term: string }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The cached card belongs to one term. If this instance is reused with a new
+  // term (changed stack choice, reordered decision), drop the stale content
+  // before it can render under the wrong label.
+  const [renderedFor, setRenderedFor] = useState(term);
+  if (renderedFor !== term) {
+    setRenderedFor(term);
+    setCard(null);
+    setOpen(false);
+    setError(null);
+  }
+
   const toggle = async () => {
     if (open) {
       setOpen(false);

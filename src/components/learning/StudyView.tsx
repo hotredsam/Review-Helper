@@ -54,31 +54,14 @@ export function StudyView({ subjectId }: { subjectId: number }) {
 
   const active = modules.find((m) => `m${m.id}` === tab) ?? null;
 
-  const TabButton = ({ id, label, icon: Icon }: { id: string; label: string; icon: LucideIcon }) => {
-    const on = tab === id;
-    return (
-      <button
-        onClick={() => setTab(id)}
-        aria-current={on ? "page" : undefined}
-        className={
-          "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors " +
-          (on ? "bg-accent/10 font-medium text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg")
-        }
-      >
-        <Icon className="h-4 w-4" />
-        {label}
-      </button>
-    );
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1 border-b border-border pb-2">
         {modules.map((m) => (
-          <TabButton key={m.id} id={`m${m.id}`} label={m.title} icon={KIND_ICON[m.kind] ?? FileText} />
+          <TabButton key={m.id} id={`m${m.id}`} label={m.title} icon={KIND_ICON[m.kind] ?? FileText} tab={tab} setTab={setTab} />
         ))}
-        <TabButton id="tutor" label="Tutor" icon={MessageCircle} />
-        <TabButton id="progress" label="Progress" icon={TrendingUp} />
+        <TabButton id="tutor" label="Tutor" icon={MessageCircle} tab={tab} setTab={setTab} />
+        <TabButton id="progress" label="Progress" icon={TrendingUp} tab={tab} setTab={setTab} />
       </div>
 
       <div>
@@ -89,5 +72,37 @@ export function StudyView({ subjectId }: { subjectId: number }) {
         {tab === "progress" && <ProgressPane subjectId={subjectId} />}
       </div>
     </div>
+  );
+}
+
+/** Top-level (not defined inside StudyView's body): an inline component type is
+ *  recreated every render, which remounts each tab button and drops keyboard
+ *  focus on every click. */
+function TabButton({
+  id,
+  label,
+  icon: Icon,
+  tab,
+  setTab,
+}: {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  tab: string;
+  setTab: (id: string) => void;
+}) {
+  const on = tab === id;
+  return (
+    <button
+      onClick={() => setTab(id)}
+      aria-current={on ? "page" : undefined}
+      className={
+        "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors " +
+        (on ? "bg-accent/10 font-medium text-fg" : "text-fg-muted hover:bg-surface-2 hover:text-fg")
+      }
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
   );
 }

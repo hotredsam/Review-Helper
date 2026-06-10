@@ -51,6 +51,9 @@ export function ChatPane({ project }: { project: Project }) {
 
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Autoscroll only while the user is already at (or near) the bottom — once
+  // they scroll up to re-read, streaming tokens must not yank them back down.
+  const stickToBottom = useRef(true);
 
   useEffect(() => {
     ensureChatListener();
@@ -60,7 +63,9 @@ export function ChatPane({ project }: { project: Project }) {
     void loadPending(id);
   }, [id, loadProject, loadPending]);
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    if (stickToBottom.current) {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+    }
   }, [messages]);
 
   const streaming = status === "streaming";
@@ -82,7 +87,14 @@ export function ChatPane({ project }: { project: Project }) {
     <div className="flex h-full">
       <div className="flex h-full min-w-0 flex-1 flex-col">
         <div className="mx-auto flex h-full w-full max-w-3xl flex-col p-6">
-          <div ref={scrollRef} className="flex-1 space-y-3 overflow-auto pb-4">
+          <div
+            ref={scrollRef}
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+            }}
+            className="flex-1 space-y-3 overflow-auto pb-4"
+          >
             {messages.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
                 <MessagesSquare className="h-8 w-8 text-fg-subtle" />

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
+import { useFocusTrap } from "../lib/focusTrap";
 import { X, ArrowRight, ArrowLeft } from "lucide-react";
 
 export interface TourStep {
@@ -27,6 +28,14 @@ export const TOUR_STEPS: TourStep[] = [
     title: "Sync to GitHub",
     body: "Push your planning package and one issue per phase to GitHub — every change to main, including closes and deletions, is previewed before anything is written.",
   },
+  {
+    title: "Overview & Palette",
+    body: "Overview scores the project's vibecoding health on a live rubric. The Palette plans a build before a repo even exists — sketch, compare stacks, and promote it to a project.",
+  },
+  {
+    title: "Learning mode",
+    body: "Flip the toggle in the sidebar to switch the whole app into Learning mode: create subjects, get a tailored study plan, then notes, flashcards (spaced repetition), quizzes, and a tutor that adapts to you.",
+  },
 ];
 
 const SEEN_KEY = "rh.tour.seen";
@@ -49,29 +58,21 @@ export function markTourSeen() {
 /** A 5-step welcome tour. Fixed content (no runtime LLM UI). */
 export function Tour({ onClose }: { onClose: () => void }) {
   const [i, setI] = useState(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const step = TOUR_STEPS[i];
   const last = i === TOUR_STEPS.length - 1;
   const close = () => {
     markTourSeen();
     onClose();
   };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Same focus behavior as Modal: trap Tab, Escape skips (deliberate key press
+  // — unlike a stray click, which no longer dismisses the tour forever).
+  useFocusTrap(dialogRef, true, close);
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim p-4"
-      onClick={close}
-      role="presentation"
-    >
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim p-4" role="presentation">
       <div
+        ref={dialogRef}
         className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Welcome tour"

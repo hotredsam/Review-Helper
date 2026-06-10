@@ -6,8 +6,7 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 
 use crate::context::fence_safe;
-use crate::model::claude::ClaudeCodeProvider;
-use crate::model::{ModelEvent, ModelProvider, ModelRequest};
+use crate::model::{ModelEvent, ModelRequest};
 
 // ---- data layer ----
 

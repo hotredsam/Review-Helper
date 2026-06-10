@@ -10,8 +10,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::context::ProjectContext;
 use crate::db::Db;
-use crate::model::claude::ClaudeCodeProvider;
-use crate::model::{ModelEvent, ModelProvider, ModelRequest};
+use crate::model::{ModelEvent, ModelRequest};
 use crate::plan::{ingest, parse, prompts, store};
 use crate::projects;
 
@@ -433,6 +432,8 @@ pub fn get_plan(db: State<'_, Db>, project_id: i64) -> Result<Option<store::Plan
 
 #[cfg(test)]
 mod tests {
+    use crate::model::claude::ClaudeCodeProvider;
+    use crate::model::ModelProvider;
     use super::*;
     use crate::db::init_connection;
 

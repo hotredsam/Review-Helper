@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { ChevronsUpDown, Plus, Check, Folder } from "lucide-react";
+import { ChevronsUpDown, Plus, Check, Folder, Pencil, Trash2 } from "lucide-react";
+import { Modal } from "./Modal";
+import { ConfirmDialog } from "./ConfirmDialog";
+import type { Project } from "../api/projects";
 import { useProjectStore } from "../store/projectStore";
 
 interface Props {
@@ -15,7 +18,13 @@ export function ProjectSwitcher({ collapsed, onNewProject }: Props) {
   const projects = useProjectStore((s) => s.projects);
   const activeId = useProjectStore((s) => s.activeProjectId);
   const select = useProjectStore((s) => s.select);
+  const rename = useProjectStore((s) => s.rename);
+  const remove = useProjectStore((s) => s.remove);
   const [open, setOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<Project | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+  const [manageError, setManageError] = useState<string | null>(null);
   const active = projects.find((p) => p.id === activeId) ?? null;
 
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -106,7 +115,7 @@ export function ProjectSwitcher({ collapsed, onNewProject }: Props) {
             {projects.length > 0 && (
               <ul className="max-h-60 overflow-auto py-1" role="listbox" aria-label="Projects">
                 {projects.map((p, i) => (
-                  <li key={p.id} role="presentation">
+                  <li key={p.id} role="presentation" className="group flex items-center">
                     <button
                       ref={(el) => {
                         optionRefs.current[i] = el;
@@ -117,10 +126,35 @@ export function ProjectSwitcher({ collapsed, onNewProject }: Props) {
                         select(p.id);
                         close();
                       }}
-                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm text-fg hover:bg-surface-2 focus:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring/60"
+                      className="flex min-w-0 flex-1 items-center justify-between gap-2 px-3 py-2 text-left text-sm text-fg hover:bg-surface-2 focus:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring/60"
                     >
                       <span className="truncate">{p.name}</span>
                       {p.id === activeId && <Check className="h-4 w-4 shrink-0 text-accent" />}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Rename ${p.name}`}
+                      onClick={() => {
+                        setRenameTarget(p);
+                        setRenameValue(p.name);
+                        setManageError(null);
+                        close(false);
+                      }}
+                      className="shrink-0 rounded p-1 text-fg-subtle opacity-0 transition-opacity hover:text-fg focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${p.name}`}
+                      onClick={() => {
+                        setDeleteTarget(p);
+                        setManageError(null);
+                        close(false);
+                      }}
+                      className="mr-1 shrink-0 rounded p-1 text-fg-subtle opacity-0 transition-opacity hover:text-danger focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </li>
                 ))}
@@ -138,6 +172,63 @@ export function ProjectSwitcher({ collapsed, onNewProject }: Props) {
           </div>
         </>
       )}
+
+      <Modal open={renameTarget !== null} onClose={() => setRenameTarget(null)} title="Rename project">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const name = renameValue.trim();
+            if (!renameTarget || !name) return;
+            rename(renameTarget.id, name)
+              .then(() => setRenameTarget(null))
+              .catch((err) => setManageError(String(err)));
+          }}
+          className="space-y-3"
+        >
+          <input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            aria-label="Project name"
+            maxLength={120}
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none focus:ring-2 focus:ring-ring/40"
+          />
+          {manageError && (
+            <p className="text-sm text-danger" role="alert">
+              {manageError}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setRenameTarget(null)}
+              className="rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!renameValue.trim()}
+              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-60"
+            >
+              Save
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete this project?"
+        body={`"${deleteTarget?.name ?? ""}" and its plan, decisions, chats, and clone cache are permanently deleted.`}
+        confirmLabel="Delete project"
+        onConfirm={() => {
+          if (deleteTarget) {
+            remove(deleteTarget.id).catch((err) => setManageError(String(err)));
+          }
+          setDeleteTarget(null);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

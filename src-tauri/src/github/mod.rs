@@ -9,7 +9,6 @@
 pub mod api;
 pub mod clone;
 pub mod commands;
-pub mod device;
 pub mod keychain;
 
 /// Shared blocking HTTP client. GitHub requires a User-Agent header.

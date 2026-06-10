@@ -436,10 +436,20 @@ pub async fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: St
 
 // ---- L6: upload ingest (PDF → text; text/markdown are read in the frontend) ----
 
-/// Extract text from an uploaded PDF's bytes to seed a subject. Bounded + panic-
-/// safe; degrades to a clear "paste the text instead" error on failure.
+/// Extract text from an uploaded PDF (base64-encoded) to seed a subject.
+/// Base64 because a 25 MB file as a JSON number array froze the webview while
+/// serializing. Bounded + panic-safe; degrades to a clear "paste the text
+/// instead" error on failure.
 #[tauri::command]
-pub async fn learning_extract_pdf(bytes: Vec<u8>) -> Result<String, String> {
+pub async fn learning_extract_pdf(bytes_b64: String) -> Result<String, String> {
+    use base64::Engine;
+    if bytes_b64.len() > 34_000_000 {
+        // ~25 MB binary at 4/3 base64 expansion.
+        return Err("That PDF is too large (max 25 MB). Paste the relevant text instead.".into());
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(bytes_b64.trim())
+        .map_err(|_| "That upload couldn't be decoded. Try the file again, or paste the text instead.")?;
     if bytes.len() > 25_000_000 {
         return Err("That PDF is too large (max 25 MB). Paste the relevant text instead.".into());
     }

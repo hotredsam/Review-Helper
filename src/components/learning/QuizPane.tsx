@@ -90,7 +90,9 @@ export function QuizPane({ moduleId, onAnswered }: { moduleId: number; onAnswere
   const q = qs[i];
 
   const answer = async (idx: number) => {
-    if (result) return;
+    // Lock while in flight: a double-click would record two attempts and skew
+    // the persisted mastery estimate.
+    if (result || picked !== null) return;
     setPicked(idx);
     try {
       const r = await learningQuizAnswer(q.id, idx, Date.now() - startedAt);

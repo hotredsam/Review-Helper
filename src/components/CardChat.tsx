@@ -13,6 +13,13 @@ export function CardChat({ project, term }: { project: number; term: string }) {
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Identity of the card currently on screen; a reply that resolves after the
+  // user switched cards is dropped instead of landing in the wrong chat.
+  const keyRef = useRef(`${project}:${term}`);
+  useEffect(() => {
+    keyRef.current = `${project}:${term}`;
+  }, [project, term]);
+
   useEffect(() => {
     let alive = true;
     setMsgs([]);
@@ -36,13 +43,15 @@ export function CardChat({ project, term }: { project: number; term: string }) {
     setError(null);
     setMsgs((prev) => [...prev, { role: "user", content: m }]);
     setDraft("");
+    const key = `${project}:${term}`;
     try {
       const reply = await cardChatSend(project, term, m);
+      if (keyRef.current !== key) return; // user switched cards mid-flight
       setMsgs((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (e) {
-      setError(String(e));
+      if (keyRef.current === key) setError(String(e));
     } finally {
-      setBusy(false);
+      if (keyRef.current === key) setBusy(false);
     }
   };
 

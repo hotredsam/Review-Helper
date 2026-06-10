@@ -39,12 +39,16 @@ export function UnderstandHub({ project }: { project: Project }) {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
-    const [cs, terms] = await Promise.all([cardsList(), cardProjectTerms(project.id)]);
+    const forProject = project.id;
+    const [cs, terms] = await Promise.all([cardsList(), cardProjectTerms(forProject)]);
+    // A slow response from a previous project must not overwrite this one.
+    if (forProject !== project.id) return;
     setCards(cs);
     setProjectTerms(new Set(terms.map((t) => t.toLowerCase())));
   };
   useEffect(() => {
     void refresh().catch((e) => setError(String(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 
   // Generate a card for a typed term (spelling/grammar cleaned first).

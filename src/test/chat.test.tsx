@@ -61,7 +61,11 @@ describe("chat store (persisted transcripts)", () => {
     ctrl.cb!({ type: "failed", project_id: 8, transcript_id: tid, detail: "Claude not available" });
     expect(useChatStore.getState().status[8]).toBe("error");
     expect(useChatStore.getState().error[8]).toBe("Claude not available");
-    expect(useChatStore.getState().messages[tid][1].streaming).toBe(false);
+    // Phase 18: a turn that failed before any token leaves NO dangling empty
+    // bubble — the error line below the input is the visible record.
+    const after = useChatStore.getState().messages[tid];
+    expect(after).toHaveLength(1);
+    expect(after[0].role).toBe("user");
   });
 
   it("loads pending suggestions after a turn that produced them", async () => {
@@ -150,5 +154,21 @@ describe("chat stop (Phase 16)", () => {
     expect(msgs).toHaveLength(1); // just the user message — no dangling empty bubble
     expect(msgs[0].role).toBe("user");
     expect(useChatStore.getState().status[8]).toBe("idle");
+  });
+});
+
+describe("loadProject in-flight guard (Phase 18)", () => {
+  it("two concurrent first-loads create exactly one transcript", async () => {
+    const { chatTranscripts, chatNew } = await import("../api/chat");
+    let release!: (v: any[]) => void;
+    vi.mocked(chatTranscripts).mockReturnValueOnce(new Promise((r) => (release = r)));
+
+    const first = useChatStore.getState().loadProject(11);
+    const second = useChatStore.getState().loadProject(11); // StrictMode double-mount
+    release([]);
+    await Promise.all([first, second]);
+    await flush();
+
+    expect(vi.mocked(chatNew)).toHaveBeenCalledTimes(1);
   });
 });

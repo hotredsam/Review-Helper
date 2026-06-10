@@ -12,8 +12,7 @@ use super::{
 };
 use crate::context::ProjectContext;
 use crate::db::Db;
-use crate::model::claude::ClaudeCodeProvider;
-use crate::model::{ModelEvent, ModelProvider, ModelRequest};
+use crate::model::{ModelEvent, ModelRequest};
 use crate::projects;
 
 #[derive(Serialize, Clone)]
@@ -204,6 +203,8 @@ pub fn grill_delete(db: State<'_, Db>, project_id: i64, question_id: i64) -> Res
 
 #[cfg(test)]
 mod tests {
+    use crate::model::claude::ClaudeCodeProvider;
+    use crate::model::ModelProvider;
     use super::super::generate::bank;
     use super::*;
 

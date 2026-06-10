@@ -51,7 +51,7 @@ export function ChatHistoryRail({ project }: { project: number }) {
                 type="button"
                 onClick={() => setConfirmDelete(t)}
                 aria-label="Delete chat"
-                className="hidden shrink-0 rounded p-1 text-fg-subtle hover:text-danger group-hover:block"
+                className="shrink-0 rounded p-1 text-fg-subtle opacity-0 transition-opacity hover:text-danger focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/60 group-focus-within:opacity-100 group-hover:opacity-100"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>

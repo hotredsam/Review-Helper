@@ -83,8 +83,6 @@ pub fn run() {
             github::commands::github_connect_gh,
             github::commands::github_sign_out,
             github::commands::github_list_repos,
-            github::commands::github_device_start,
-            github::commands::github_device_poll,
             github::commands::project_import_repo,
             github::commands::project_link_url,
             github::commands::project_create_repo,

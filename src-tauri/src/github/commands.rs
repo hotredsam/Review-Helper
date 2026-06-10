@@ -5,7 +5,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
 use crate::db::Db;
-use crate::github::{api, clone, device, keychain};
+use crate::github::{api, clone, keychain};
 use crate::projects::{self, Project};
 use crate::settings;
 
@@ -16,7 +16,6 @@ pub struct GithubStatus {
 }
 
 const LOGIN_KEY: &str = "github.login";
-const CLIENT_ID_KEY: &str = "github.client_id";
 
 fn stored_login(db: &State<Db>) -> Option<String> {
     let conn = db.0.lock().ok()?;
@@ -47,7 +46,7 @@ pub fn github_connect_gh(db: State<Db>) -> Result<GithubStatus, String> {
         .output()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                "GitHub CLI (`gh`) not found. Install it, or sign in with the device flow.".to_string()
+                "GitHub CLI (`gh`) not found. Install it (brew install gh), run `gh auth login`, then retry.".to_string()
             } else {
                 e.to_string()
             }
@@ -78,53 +77,6 @@ pub fn github_sign_out(db: State<Db>) -> Result<(), String> {
 #[tauri::command]
 pub fn github_list_repos() -> Result<Vec<api::RepoSummary>, String> {
     api::list_repos()
-}
-
-// ---- Device flow: built now, active once a client_id is configured ----
-
-fn client_id(db: &State<Db>) -> Result<String, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
-    settings::get(&conn, CLIENT_ID_KEY)
-        .ok()
-        .flatten()
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| {
-            "No GitHub OAuth client_id configured. Connect via the gh CLI, or set one in Settings.".to_string()
-        })
-}
-
-#[tauri::command]
-pub fn github_device_start(db: State<Db>) -> Result<device::DeviceCode, String> {
-    device::request_device_code(&client_id(&db)?)
-}
-
-#[derive(Serialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
-pub enum DevicePollResult {
-    Authorized { login: String },
-    Pending,
-    SlowDown,
-    Denied,
-    Expired,
-    Error { detail: String },
-}
-
-#[tauri::command]
-pub fn github_device_poll(db: State<Db>, device_code: String) -> Result<DevicePollResult, String> {
-    let client_id = client_id(&db)?;
-    Ok(match device::poll_token(&client_id, &device_code) {
-        device::PollOutcome::Authorized(token) => {
-            let login = api::get_login_with(&token)?;
-            keychain::save_token(&token)?;
-            set_login(&db, &login)?;
-            DevicePollResult::Authorized { login }
-        }
-        device::PollOutcome::Pending => DevicePollResult::Pending,
-        device::PollOutcome::SlowDown => DevicePollResult::SlowDown,
-        device::PollOutcome::Denied => DevicePollResult::Denied,
-        device::PollOutcome::Expired => DevicePollResult::Expired,
-        device::PollOutcome::Error(detail) => DevicePollResult::Error { detail },
-    })
 }
 
 // ---- Add-project paths (import / link / create-from-app) ----
@@ -161,6 +113,7 @@ fn split_owner_repo(rest: &str) -> Option<(String, String)> {
 }
 
 /// Path 1: import a repo picked from the connected user's list.
+
 #[tauri::command]
 pub fn project_import_repo(
     db: State<Db>,

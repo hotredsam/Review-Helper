@@ -31,9 +31,10 @@ export function subjectsList(): Promise<Subject[]> {
   return invoke<Subject[]>("subjects_list");
 }
 
-/** Extract text from an uploaded PDF's bytes (server-side) to seed a subject. */
-export function learningExtractPdf(bytes: number[]): Promise<string> {
-  return invoke<string>("learning_extract_pdf", { bytes });
+/** Extract text from an uploaded PDF (base64 — a 25 MB file as a JSON number
+ *  array froze the UI for seconds while it serialized). */
+export function learningExtractPdf(bytesB64: string): Promise<string> {
+  return invoke<string>("learning_extract_pdf", { bytesB64 });
 }
 
 export function subjectGet(subjectId: number): Promise<SubjectDetail> {

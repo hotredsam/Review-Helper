@@ -49,3 +49,7 @@ credentials
 
 # Phase H design-export build output (the snapshot is written to the Desktop)
 /dist-gallery/
+
+# Python bytecode (secrets-scanner runs regenerate it)
+__pycache__/
+*.pyc

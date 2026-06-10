@@ -44,6 +44,11 @@ interface ChatStore {
 const toMsgs = (rows: { role: "user" | "assistant"; content: string }[]): Message[] =>
   rows.map((r) => ({ role: r.role, text: r.content }));
 
+// Projects with a loadProject in flight: two concurrent first-loads would both
+// see "no transcripts" and both create one (a duplicate persisted to SQLite —
+// guaranteed under StrictMode's double-mount in dev).
+const loadingProjects = new Set<number>();
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   transcripts: {},
   activeId: {},
@@ -53,6 +58,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   pending: {},
 
   loadProject: async (project) => {
+    if (loadingProjects.has(project)) return;
+    loadingProjects.add(project);
     try {
       const list = await chatTranscripts(project);
       // Already initialized: just refresh the rail.
@@ -79,6 +86,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
     } catch (e) {
       set((s) => ({ error: { ...s.error, [project]: String(e) } }));
+    } finally {
+      loadingProjects.delete(project);
     }
   },
 
@@ -200,6 +209,14 @@ function handle(e: ChatEvent) {
       if (e.suggestions > 0) void useChatStore.getState().loadPending(e.project_id);
       break;
     case "failed":
+      // A turn that failed before any token leaves no dangling empty bubble —
+      // the error line below the input is the visible record of what happened.
+      useChatStore.setState((s) => {
+        const msgs = (s.messages[e.transcript_id] ?? []).slice();
+        const last = msgs[msgs.length - 1];
+        if (last?.role === "assistant" && last.streaming && last.text === "") msgs.pop();
+        return { messages: { ...s.messages, [e.transcript_id]: msgs } };
+      });
       patchLastAssistant(e.transcript_id, (m) => ({ ...m, streaming: false }));
       useChatStore.setState((s) => ({
         status: { ...s.status, [e.project_id]: "error" },

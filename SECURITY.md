@@ -23,6 +23,14 @@
   of that, the `ProjectContext` bundle marks recorded state as untrusted DATA and
   backtick-delimits each value — an advisory behavioral hint, not a hard control.
 
+## GitHub token scope
+
+The app imports the `gh` CLI's token (`gh auth token`) and stores it in the
+macOS keychain. Its scope is whatever `gh auth login` granted — typically the
+classic `repo` scope, which private-repo access genuinely requires. The unused
+OAuth device flow was removed in Phase 18; narrowing to a fine-grained PAT is
+the user's call at `gh auth login` time.
+
 ## Trust model for imported content (deliberate decision, 2026-06-09)
 
 Imported repositories and uploaded documents are treated as **trusted input**.

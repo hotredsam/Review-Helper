@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import { useFocusTrap } from "../lib/focusTrap";
 
 interface ModalProps {
   open: boolean;
@@ -7,60 +8,12 @@ interface ModalProps {
   children: ReactNode;
 }
 
-const FOCUSABLE =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 /** Lightweight modal: scrim + centered card. Closes on Escape or scrim click.
  *  The scrim uses the theme `--scrim` token, so it works in every theme.
- *  Focus is trapped inside the dialog while open and returned to the previously
- *  focused element on close, so keyboard and screen-reader users stay oriented. */
+ *  Focus handling (trap, restore) lives in the shared useFocusTrap hook. */
 export function Modal({ open, onClose, title, children }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    // Remember what had focus so we can restore it when the dialog closes.
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-
-    const focusables = () =>
-      Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter(
-        (el) => el.offsetParent !== null || el === document.activeElement,
-      );
-
-    // Move focus into the dialog (first focusable, else the dialog itself).
-    const first = focusables()[0] ?? dialogRef.current;
-    first?.focus();
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      // Trap Tab / Shift+Tab so focus cycles within the dialog.
-      const items = focusables();
-      if (items.length === 0) {
-        e.preventDefault();
-        return;
-      }
-      const firstEl = items[0];
-      const lastEl = items[items.length - 1];
-      const active = document.activeElement;
-      if (e.shiftKey && (active === firstEl || !dialogRef.current?.contains(active))) {
-        e.preventDefault();
-        lastEl.focus();
-      } else if (!e.shiftKey && active === lastEl) {
-        e.preventDefault();
-        firstEl.focus();
-      }
-    };
-
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      previouslyFocused?.focus?.();
-    };
-  }, [open, onClose]);
+  useFocusTrap(dialogRef, open, onClose);
 
   if (!open) return null;
 

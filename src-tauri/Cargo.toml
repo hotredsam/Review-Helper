@@ -18,6 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+base64 = "0.22" # PDF upload transport: number-array JSON froze the webview
 libc = "0.2" # killpg: stopping a model run must kill the whole child process group
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
