@@ -1,0 +1,28 @@
+name: Bug report
+description: Something broke or behaved dishonestly
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, what actually happened?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Code mode (plan/grill/chat/sync), Learning mode, Voice capture, Model/provider, Settings/profile, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: 1. … 2. … 3. …
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: v0.1.0 or a short SHA
