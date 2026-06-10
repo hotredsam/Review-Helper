@@ -69,8 +69,10 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
         migration_step(conn, 5, migrate_v5)?;
     }
     if version < 6 {
-        migrate_v6(conn)?;
-        conn.pragma_update(None, "user_version", 6)?;
+        migration_step(conn, 6, migrate_v6)?;
+    }
+    if version < 7 {
+        migration_step(conn, 7, migrate_v7)?;
     }
     Ok(())
 }
@@ -244,6 +246,13 @@ fn migrate_v3(conn: &Connection) -> rusqlite::Result<()> {
 /// case-variant duplicates onto the oldest row. Fresh databases already carry
 /// the NOCASE constraint from `schema.sql`, so the rebuild is a harmless no-op
 /// there; everything here is idempotent.
+/// v7 (Phase 19): chunked ingest. Each module remembers the section of the
+/// source document it was proposed from, so material generation grounds on the
+/// RIGHT part of a big upload instead of one truncated blob.
+fn migrate_v7(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch("ALTER TABLE learning_modules ADD COLUMN source_excerpt TEXT;")
+}
+
 /// Run one migration step atomically: the schema change and the version bump
 /// commit together, so a crash mid-step rolls back to a cleanly re-runnable
 /// state instead of stranding a half-applied version.
@@ -336,7 +345,7 @@ mod tests {
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
     }
 
     #[test]
@@ -374,7 +383,7 @@ mod tests {
         conn.execute_batch("CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT);").unwrap();
         run_migrations(&conn).expect("a partial base schema must not brick the app");
         let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert!(v >= 5);
+        assert!(v >= 7);
         // The real schema replaced the partial table (kind column exists).
         conn.execute("INSERT INTO projects (name, kind) VALUES ('ok','new')", []).unwrap();
     }

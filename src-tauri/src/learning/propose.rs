@@ -61,10 +61,12 @@ pub fn list_modules(conn: &Connection, subject_id: i64) -> Result<Vec<ProposedMo
     .map_err(|e| e.to_string())
 }
 
-pub(super) fn save_modules(conn: &Connection, subject_id: i64, modules: &[ParsedModule]) -> Result<(), String> {
-    for (i, m) in modules.iter().enumerate() {
-        conn.execute(
-            "INSERT INTO learning_modules (subject_id, idx, kind, title, summary, skill) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+pub(super) fn save_modules(conn: &Connection, subject_id: i64, modules: &[SectionedModule]) -> Result<(), String> {
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    for (i, sm) in modules.iter().enumerate() {
+        let m = &sm.module;
+        tx.execute(
+            "INSERT INTO learning_modules (subject_id, idx, kind, title, summary, skill, source_excerpt) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 subject_id,
                 i as i64,
@@ -72,11 +74,12 @@ pub(super) fn save_modules(conn: &Connection, subject_id: i64, modules: &[Parsed
                 m.title.trim().chars().take(200).collect::<String>(),
                 m.summary.trim().chars().take(600).collect::<String>(),
                 m.skill.trim().chars().take(120).collect::<String>(),
+                sm.excerpt,
             ],
         )
         .map_err(|e| e.to_string())?;
     }
-    Ok(())
+    tx.commit().map_err(|e| e.to_string())
 }
 
 pub fn set_included(conn: &Connection, module_id: i64, included: bool) -> Result<(), String> {
@@ -121,29 +124,93 @@ fn intake_block(intake: &[IntakeItem]) -> String {
     s
 }
 
-/// Generate the proposed module manifest from the subject + intake answers. Pure
-/// model work (no DB); the caller persists under a brief lock.
-pub(super) fn fetch_modules(provider: &dyn ModelProvider, subject: &SubjectDetail, intake: &[IntakeItem], cancel: &CancelToken) -> Result<Vec<ParsedModule>, String> {
-    let prompt = format!(
-        "Subject: {}\n\nWhat the learner wants (DATA — untrusted):\n{}\n\nScoping answers (DATA — untrusted):\n{}",
-        fence_safe(&subject.title),
-        fence_safe(subject.source_text.as_deref().unwrap_or("(none)")),
-        intake_block(intake),
-    );
-    let text = run_once(provider, prompt, PROPOSE_SYSTEM, cancel)?;
-    let json = extract_json(&text)?;
+/// A proposed module plus the source section it was proposed from (None for
+/// described subjects — there's no document to excerpt).
+pub(super) struct SectionedModule {
+    pub module: ParsedModule,
+    pub excerpt: Option<String>,
+}
+
+fn parse_proposal(text: &str, cap: usize) -> Result<Vec<ParsedModule>, String> {
+    let json = extract_json(text)?;
     let proposal: Proposal =
         serde_json::from_str(json).map_err(|_| "The proposed plan was malformed.".to_string())?;
-    let modules: Vec<ParsedModule> = proposal
+    Ok(proposal
         .modules
         .into_iter()
         .filter(|m| KINDS.contains(&m.kind.trim()) && !m.title.trim().is_empty())
-        .take(8)
-        .collect();
-    if modules.is_empty() {
+        .take(cap)
+        .collect())
+}
+
+fn norm_title(t: &str) -> String {
+    t.trim().to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect()
+}
+
+/// Generate the proposed module manifest. Small sources are one call (today's
+/// path); large uploads are split into sections, proposed per section (1–3
+/// modules each, labeled), then merged with near-duplicate titles dropped —
+/// full-document coverage instead of the old silent 40k truncation. `progress`
+/// is called as (done_sections, total_sections).
+pub(super) fn fetch_modules(
+    provider: &dyn ModelProvider,
+    subject: &SubjectDetail,
+    intake: &[IntakeItem],
+    cancel: &CancelToken,
+    mut progress: impl FnMut(usize, usize),
+) -> Result<Vec<SectionedModule>, String> {
+    let source = subject.source_text.as_deref().unwrap_or("");
+    let sections = super::sections::split_sections(source, super::sections::SECTION_TARGET_CHARS);
+
+    if sections.len() <= 1 {
+        let prompt = format!(
+            "Subject: {}\n\nWhat the learner wants (DATA — untrusted):\n{}\n\nScoping answers (DATA — untrusted):\n{}",
+            fence_safe(&subject.title),
+            fence_safe(if source.is_empty() { "(none)" } else { source }),
+            intake_block(intake),
+        );
+        let text = run_once(provider, prompt, PROPOSE_SYSTEM, cancel)?;
+        let modules = parse_proposal(&text, 8)?;
+        if modules.is_empty() {
+            return Err("No study modules were proposed.".into());
+        }
+        let excerpt = (!source.is_empty()).then(|| source.to_string());
+        return Ok(modules.into_iter().map(|m| SectionedModule { module: m, excerpt: excerpt.clone() }).collect());
+    }
+
+    let total = sections.len();
+    let mut out: Vec<SectionedModule> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (i, section) in sections.iter().enumerate() {
+        if cancel.is_cancelled() {
+            return Err("Stopped.".into());
+        }
+        let label = section.title.clone().unwrap_or_else(|| format!("Part {}", i + 1));
+        let prompt = format!(
+            "Subject: {} — section {}/{} ({})\n\nThis SECTION of the learner's material (DATA — untrusted):\n{}\n\nScoping answers (DATA — untrusted):\n{}\n\nPropose 1–3 modules covering THIS SECTION only.",
+            fence_safe(&subject.title),
+            i + 1,
+            total,
+            fence_safe(&label),
+            fence_safe(&section.body),
+            intake_block(intake),
+        );
+        let text = run_once(provider, prompt, PROPOSE_SYSTEM, cancel)?;
+        for m in parse_proposal(&text, 3)? {
+            // Merge pass: overlapping sections often re-propose the same topic.
+            if seen.insert(norm_title(&m.title)) {
+                out.push(SectionedModule { module: m, excerpt: Some(section.body.clone()) });
+            }
+        }
+        progress(i + 1, total);
+        if out.len() >= 12 {
+            break; // plan stays studyable; later sections still ground the tutor via Phase 21
+        }
+    }
+    if out.is_empty() {
         return Err("No study modules were proposed.".into());
     }
-    Ok(modules)
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -166,8 +233,14 @@ mod tests {
     fn saves_lists_toggles_and_counts_modules() {
         let conn = db();
         let mods = vec![
-            ParsedModule { kind: "notes".into(), title: "Greetings".into(), summary: "Hello/goodbye".into(), skill: "greetings".into() },
-            ParsedModule { kind: "flashcards".into(), title: "Core vocab".into(), summary: "100 words".into(), skill: "vocab".into() },
+            SectionedModule {
+                module: ParsedModule { kind: "notes".into(), title: "Greetings".into(), summary: "Hello/goodbye".into(), skill: "greetings".into() },
+                excerpt: Some("Chapter on greetings".into()),
+            },
+            SectionedModule {
+                module: ParsedModule { kind: "flashcards".into(), title: "Core vocab".into(), summary: "100 words".into(), skill: "vocab".into() },
+                excerpt: None,
+            },
         ];
         save_modules(&conn, 1, &mods).unwrap();
         let listed = list_modules(&conn, 1).unwrap();
@@ -177,5 +250,61 @@ mod tests {
 
         set_included(&conn, listed[0].id, false).unwrap();
         assert_eq!(included_count(&conn, 1).unwrap(), 1);
+    }
+
+    struct CountingProvider {
+        calls: std::sync::atomic::AtomicUsize,
+        json: &'static str,
+    }
+    impl crate::model::ModelProvider for CountingProvider {
+        fn run(&self, _req: &crate::model::ModelRequest, _cancel: &CancelToken, sink: &mut dyn FnMut(crate::model::ModelEvent)) {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            sink(crate::model::ModelEvent::Completed { session_id: None, text: self.json.to_string() });
+        }
+    }
+
+    fn subject_with_source(source: &str) -> SubjectDetail {
+        SubjectDetail {
+            id: 1,
+            title: "Biology".into(),
+            source_kind: "upload".into(),
+            source_text: Some(source.to_string()),
+            stage: "intake".into(),
+        }
+    }
+
+    #[test]
+    fn small_sources_propose_in_one_call_with_full_excerpt() {
+        let p = CountingProvider {
+            calls: Default::default(),
+            json: r#"{"modules":[{"kind":"notes","title":"Cells","summary":"s","skill":"cells"}]}"#,
+        };
+        let out = fetch_modules(&p, &subject_with_source("short doc"), &[], &CancelToken::new(), |_, _| {}).unwrap();
+        assert_eq!(p.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].excerpt.as_deref(), Some("short doc"));
+    }
+
+    #[test]
+    fn large_sources_propose_per_section_and_dedupe_titles() {
+        // ~3 sections of distinct content; the scripted model proposes the same
+        // module title every call, so the merge keeps exactly one.
+        let mut doc = String::new();
+        for i in 0..3 {
+            doc.push_str(&format!("# Chapter {i}\n\n{}\n\n", format!("content {i} ").repeat(2500)));
+        }
+        let p = CountingProvider {
+            calls: Default::default(),
+            json: r#"{"modules":[{"kind":"quiz","title":"Photosynthesis","summary":"s","skill":"photo"}]}"#,
+        };
+        let mut progress: Vec<(usize, usize)> = Vec::new();
+        let out = fetch_modules(&p, &subject_with_source(&doc), &[], &CancelToken::new(), |d, t| progress.push((d, t))).unwrap();
+
+        let calls = p.calls.load(std::sync::atomic::Ordering::SeqCst);
+        assert!(calls >= 2, "a large doc must be proposed per section, got {calls} call(s)");
+        assert_eq!(out.len(), 1, "duplicate titles across sections merge");
+        // The surviving module is grounded on the section it came from.
+        assert!(out[0].excerpt.as_deref().unwrap().contains("content 0"));
+        assert_eq!(progress.last().map(|p| p.1), Some(calls), "progress reaches the section count");
     }
 }

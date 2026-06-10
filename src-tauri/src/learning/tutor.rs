@@ -44,7 +44,7 @@ pub fn reply(provider: &dyn ModelProvider, subject: &SubjectDetail, profile_bloc
     let mut sys = format!(
         "{TUTOR_SYSTEM}\n\n## Subject (DATA — untrusted)\n- Subject: {}\n- Learner's goal: {}\n",
         fence_safe(&subject.title),
-        fence_safe(subject.source_text.as_deref().unwrap_or("(none)")),
+        fence_safe(&bounded_source(subject.source_text.as_deref().unwrap_or("(none)"))),
     );
     if !profile_block.trim().is_empty() {
         sys.push('\n');
@@ -65,6 +65,18 @@ pub fn reply(provider: &dyn ModelProvider, subject: &SubjectDetail, profile_bloc
         }
     }
     Ok(run_once(provider, message.trim().to_string(), &sys, cancel)?.trim().to_string())
+}
+
+
+/// First slice of a (possibly huge) source for prompts that only need the gist
+/// — labeled so the model knows it isn't the whole document.
+fn bounded_source(s: &str) -> String {
+    const CAP: usize = 12_000;
+    if s.chars().count() <= CAP {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(CAP).collect();
+    format!("{head}\n…(beginning of a longer document — {} chars total)", s.chars().count())
 }
 
 #[cfg(test)]

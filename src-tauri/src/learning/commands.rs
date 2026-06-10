@@ -21,7 +21,9 @@ use crate::model::commands::provider_for;
 use crate::settings::load_model_config;
 
 const MAX_TITLE_CHARS: usize = 200;
-const MAX_SOURCE_CHARS: usize = 40_000;
+/// Hard cap with a loud error — never a silent cut (chunked ingest covers the
+/// whole document; the old 40k truncation meant materials ignored most of it).
+const MAX_SOURCE_CHARS: usize = 2_000_000;
 
 /// Per-subject async gate: a background generation locks its subject's mutex so
 /// two generations for the same subject can't interleave, while different
@@ -57,8 +59,10 @@ pub fn subject_create(
     if source_kind != "describe" && source_kind != "upload" {
         return Err("Unknown subject source.".into());
     }
-    // Bound the source text to a safe budget (uploads can be large).
-    let source: String = source_text.trim().chars().take(MAX_SOURCE_CHARS).collect();
+    if source_text.chars().count() > MAX_SOURCE_CHARS {
+        return Err("That material is enormous (over 2M characters). Split it and upload the part you're studying.".into());
+    }
+    let source: String = source_text.trim().to_string();
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     store::create_subject(&conn, title, &source_kind, &source)
 }
@@ -138,6 +142,7 @@ pub fn learning_intake_answer(db: State<'_, Db>, intake_id: i64, answer: String)
 /// intake: cache-check + gate + lock-free model call + save.
 #[tauri::command]
 pub async fn learning_propose(
+    app: tauri::AppHandle,
     db: State<'_, Db>,
     gate: State<'_, LearningGate>,
     subject_id: i64,
@@ -170,7 +175,14 @@ pub async fn learning_propose(
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         provider_for(&load_model_config(&conn))
     };
-    let modules = propose::fetch_modules(provider.as_ref(), &subject, &intake, &token); // model call, no DB lock
+    let emit_progress = |done: usize, total: usize| {
+        use tauri::Emitter;
+        let _ = app.emit(
+            "learning-progress",
+            serde_json::json!({ "subject_id": subject_id, "stage": "propose", "done": done, "total": total }),
+        );
+    };
+    let modules = propose::fetch_modules(provider.as_ref(), &subject, &intake, &token, emit_progress); // model call, no DB lock
     crate::model::registry::finish(&run_key);
     let modules = modules?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;

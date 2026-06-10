@@ -3,7 +3,9 @@
 //! malformed, encrypted, or image-only (scanned) PDF returns a clear, actionable
 //! error so the user can paste the text instead — never a crash or blank.
 
-const MAX_CHARS: usize = 40_000;
+/// Hard sanity cap — beyond this we refuse loudly instead of truncating
+/// silently (the old 40k silent cut meant quizzes only covered the start).
+const MAX_CHARS: usize = 2_000_000;
 
 /// Extract readable text from an uploaded PDF's bytes, bounded and panic-safe.
 pub fn extract_pdf(bytes: &[u8]) -> Result<String, String> {
@@ -23,7 +25,10 @@ pub fn extract_pdf(bytes: &[u8]) -> Result<String, String> {
     if trimmed.is_empty() {
         return Err("That PDF has no selectable text (it may be scanned images). Paste the text instead.".into());
     }
-    Ok(trimmed.chars().take(MAX_CHARS).collect())
+    if trimmed.chars().count() > MAX_CHARS {
+        return Err("That document is enormous (over 2M characters). Split it and upload the part you're studying.".into());
+    }
+    Ok(trimmed.to_string())
 }
 
 #[cfg(test)]

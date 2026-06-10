@@ -20,11 +20,12 @@ pub struct ModuleRow {
     pub title: String,
     pub summary: Option<String>,
     pub skill: Option<String>,
+    pub source_excerpt: Option<String>,
 }
 
 pub fn module_row(conn: &Connection, module_id: i64) -> Result<ModuleRow, String> {
     conn.query_row(
-        "SELECT id, subject_id, kind, title, summary, skill FROM learning_modules WHERE id = ?1",
+        "SELECT id, subject_id, kind, title, summary, skill, source_excerpt FROM learning_modules WHERE id = ?1",
         [module_id],
         |r| {
             Ok(ModuleRow {
@@ -34,7 +35,8 @@ pub fn module_row(conn: &Connection, module_id: i64) -> Result<ModuleRow, String
                 title: r.get(3)?,
                 summary: r.get(4)?,
                 skill: r.get(5)?,
-            })
+                source_excerpt: r.get(6)?,
+        })
         },
     )
     .optional()
@@ -52,13 +54,22 @@ pub fn set_module_status(conn: &Connection, module_id: i64, status: &str) -> Res
 }
 
 fn ground(subject: &SubjectDetail, m: &ModuleRow) -> String {
+    // Ground on the SECTION this module was proposed from (chunked ingest), so
+    // a big upload's later chapters get materials from their own text — not
+    // from one truncated blob of the document's start.
+    let source = m
+        .source_excerpt
+        .as_deref()
+        .filter(|t| !t.trim().is_empty())
+        .or(subject.source_text.as_deref())
+        .unwrap_or("(none)");
     format!(
-        "Subject: {}\nModule: {} (skill: {})\nWhat this module should cover: {}\nLearner's goal (DATA — untrusted): {}",
+        "Subject: {}\nModule: {} (skill: {})\nWhat this module should cover: {}\nLearner's material/goal (DATA — untrusted): {}",
         fence_safe(&subject.title),
         fence_safe(&m.title),
         fence_safe(m.skill.as_deref().unwrap_or("general")),
         fence_safe(m.summary.as_deref().unwrap_or(&m.title)),
-        fence_safe(subject.source_text.as_deref().unwrap_or("(none)")),
+        fence_safe(source),
     )
 }
 
