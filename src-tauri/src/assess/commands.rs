@@ -66,7 +66,11 @@ fn run_assessment(app: AppHandle, project_id: i64, clone_path: String) {
     let token = crate::model::registry::register(&run_key);
     let mut final_text: Option<String> = None;
     let mut failure: Option<String> = None;
-    ClaudeCodeProvider::new().run(&req, &token, &mut |event: ModelEvent| match event {
+    let config = match app.state::<crate::db::Db>().0.lock() {
+        Ok(conn) => crate::settings::load_model_config(&conn),
+        Err(_) => crate::settings::ModelConfig::default(),
+    };
+    crate::model::commands::provider_for(&config).run(&req, &token, &mut |event: ModelEvent| match event {
         ModelEvent::ToolUse { name } => emit(AssessmentEvent::Tool { project_id, name }),
         ModelEvent::Completed { text, .. } => final_text = Some(text),
         ModelEvent::Unavailable { detail, .. } | ModelEvent::Failed { detail } => {

@@ -94,17 +94,31 @@ fn render_transcript(conn: &Connection, transcript_id: i64, heading: &str, budge
     if msgs.is_empty() {
         return Ok(String::new());
     }
-    let mut s = format!("\n### {heading}\n");
-    for m in &msgs {
+    // Keep the NEWEST turns that fit: walk backwards and prepend, so a long
+    // chat loses its oldest context — never the recent conversation the user
+    // is actually continuing (the old loop kept the oldest and silently blinded
+    // the model to everything recent).
+    let mut kept: Vec<String> = Vec::new();
+    let mut trimmed = false;
+    for m in msgs.iter().rev() {
         let who = if m.role == "user" { "You" } else { "Helper" };
         let line = format!("- {who}: {}\n", fence_safe(m.content.trim()));
         if line.len() > *budget {
-            s.push_str("- …(earlier messages trimmed)\n");
-            *budget = 0;
+            trimmed = true;
             break;
         }
         *budget -= line.len();
-        s.push_str(&line);
+        kept.push(line);
+    }
+    if kept.is_empty() {
+        return Ok(String::new());
+    }
+    let mut s = format!("\n### {heading}\n");
+    if trimmed {
+        s.push_str("- …(earlier messages trimmed)\n");
+    }
+    for line in kept.iter().rev() {
+        s.push_str(line);
     }
     Ok(s)
 }
@@ -188,5 +202,22 @@ mod tests {
         assert!(list_transcripts(&conn, 1).unwrap().is_empty());
         let n: i64 = conn.query_row("SELECT count(*) FROM chat_messages", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0, "messages cascade-deleted");
+    }
+
+    #[test]
+    fn history_budget_keeps_the_newest_turns() {
+        let conn = db();
+        conn.execute("INSERT INTO projects (name, kind) VALUES ('P','new')", []).unwrap();
+        let pid = conn.last_insert_rowid();
+        let tid = new_transcript(&conn, pid).unwrap();
+        for i in 0..40 {
+            add_message(&conn, tid, "user", &format!("question number {i:02} padded {}", "x".repeat(80))).unwrap();
+            add_message(&conn, tid, "assistant", &format!("answer number {i:02} padded {}", "y".repeat(80))).unwrap();
+        }
+        let mut budget = 1200usize; // fits only a handful of lines
+        let out = render_transcript(&conn, tid, "This chat so far", &mut budget).unwrap();
+        assert!(out.contains("answer number 39"), "newest turn must survive: {out}");
+        assert!(!out.contains("question number 00"), "oldest must be trimmed: {out}");
+        assert!(out.contains("earlier messages trimmed"));
     }
 }

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-const ctrl = vi.hoisted(() => ({ subjects: [] as any[] }));
+const ctrl = vi.hoisted(() => ({ subjects: [] as any[], queue: { cards: [] as any[], total: 0, next_due: null as string | null } }));
 
 vi.mock("../api/learning", () => ({
   subjectsList: vi.fn(async () => ctrl.subjects),
@@ -20,6 +20,9 @@ vi.mock("../api/learning", () => ({
     { id: 2, idx: 1, question: "What's your goal?", answer: "A trip" },
   ]),
   learningIntakeAnswer: vi.fn(async () => {}),
+  learningFlashcards: vi.fn(async () => []),
+  learningFlashcardsQueue: vi.fn(async () => ctrl.queue),
+  learningFlashcardGrade: vi.fn(async () => "2099-01-01T00:00:00+00:00"),
 }));
 
 import { LearningShell } from "../components/learning/LearningShell";
@@ -77,5 +80,41 @@ describe("SubjectDetail delete (Phase 15)", () => {
     await user.click(btns[btns.length - 1]);
     await waitFor(() => expect(vi.mocked(subjectDelete)).toHaveBeenCalledWith(7));
     await waitFor(() => expect(onBack).toHaveBeenCalled());
+  });
+});
+
+describe("FlashcardsPane FSRS queue (Phase 17)", () => {
+  it("shows the nothing-due empty state with the next due date", async () => {
+    ctrl.queue = { cards: [], total: 5, next_due: "2099-06-01T09:00:00+00:00" };
+    const { FlashcardsPane } = await import("../components/learning/FlashcardsPane");
+    render(<FlashcardsPane moduleId={3} />);
+    expect(await screen.findByText(/Nothing due right now/i)).toBeTruthy();
+    expect(screen.getByText(/Next card due/i)).toBeTruthy();
+  });
+
+  it("serves the queue and finishes with a session-complete state", async () => {
+    ctrl.queue = {
+      cards: [
+        { id: 1, front: "F1", back: "B1", due: null, reps: 0 },
+        { id: 2, front: "F2", back: "B2", due: null, reps: 0 },
+      ],
+      total: 2,
+      next_due: null,
+    };
+    const { FlashcardsPane } = await import("../components/learning/FlashcardsPane");
+    const { learningFlashcardGrade } = await import("../api/learning");
+    const user = userEvent.setup();
+    render(<FlashcardsPane moduleId={4} />);
+
+    // Card 1: flip, grade Good.
+    await user.click(await screen.findByText("F1"));
+    await user.click(screen.getByRole("button", { name: "Good" }));
+    expect(vi.mocked(learningFlashcardGrade)).toHaveBeenCalledWith(1, 3);
+
+    // Card 2: flip, grade Easy → session complete.
+    await user.click(await screen.findByText("F2"));
+    await user.click(screen.getByRole("button", { name: "Easy" }));
+    expect(await screen.findByText(/Session complete/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Check for due cards/i })).toBeTruthy();
   });
 });

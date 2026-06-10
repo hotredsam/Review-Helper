@@ -149,6 +149,7 @@ pub fn run() {
             learning::commands::learning_confirm_plan,
             learning::commands::learning_notes,
             learning::commands::learning_flashcards,
+            learning::commands::learning_flashcards_queue,
             learning::commands::learning_quiz,
             learning::commands::learning_flashcard_grade,
             learning::commands::learning_quiz_answer,

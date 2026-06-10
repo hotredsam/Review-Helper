@@ -86,12 +86,12 @@ pub fn chat_history(conn: &Connection, project_id: i64, term: &str) -> Result<Ve
 
 // ---- model helpers ----
 
-fn run_once(prompt: String, system: &str, cancel: &crate::model::CancelToken) -> Result<String, String> {
+fn run_once(provider: &dyn crate::model::ModelProvider, prompt: String, system: &str, cancel: &crate::model::CancelToken) -> Result<String, String> {
     let mut req = ModelRequest::planning(prompt);
     req.system_append = Some(system.to_string());
     let mut text = None;
     let mut failure: Option<String> = None;
-    ClaudeCodeProvider::new().run(&req, cancel, &mut |e: ModelEvent| match e {
+    provider.run(&req, cancel, &mut |e: ModelEvent| match e {
         ModelEvent::Completed { text: t, .. } => text = Some(t),
         ModelEvent::Unavailable { detail, .. } | ModelEvent::Failed { detail } => failure = Some(detail),
         ModelEvent::Stopped => failure = Some("Stopped.".into()),
@@ -110,8 +110,8 @@ struct Qs {
     questions: Vec<String>,
 }
 
-pub fn generate_questions(term: &str, cancel: &crate::model::CancelToken) -> Result<Vec<String>, String> {
-    let text = run_once(format!("Concept: {}", term.trim()), PREMADE_SYSTEM, cancel)?;
+pub fn generate_questions(provider: &dyn crate::model::ModelProvider, term: &str, cancel: &crate::model::CancelToken) -> Result<Vec<String>, String> {
+    let text = run_once(provider, format!("Concept: {}", term.trim()), PREMADE_SYSTEM, cancel)?;
     let json = crate::plan::parse::extract_json(&text).ok_or("No questions JSON in the output.")?;
     let qs: Qs = serde_json::from_str(json).map_err(|_| "The questions response was malformed.".to_string())?;
     let out: Vec<String> = qs
@@ -129,8 +129,8 @@ pub fn generate_questions(term: &str, cancel: &crate::model::CancelToken) -> Res
 
 const CLEAN_SYSTEM: &str = r#"The user typed a concept/term to be explained, possibly with typos or awkward grammar. Return ONLY the corrected canonical name of the concept they meant — no quotes, no punctuation, no explanation, nothing else. If it is already correct, return it unchanged."#;
 
-pub fn clean_term(input: &str, cancel: &crate::model::CancelToken) -> Result<String, String> {
-    let text = run_once(format!("Term: {}", input.trim()), CLEAN_SYSTEM, cancel)?;
+pub fn clean_term(provider: &dyn crate::model::ModelProvider, input: &str, cancel: &crate::model::CancelToken) -> Result<String, String> {
+    let text = run_once(provider, format!("Term: {}", input.trim()), CLEAN_SYSTEM, cancel)?;
     let cleaned: String = text
         .trim()
         .lines()
@@ -148,7 +148,7 @@ pub fn clean_term(input: &str, cancel: &crate::model::CancelToken) -> Result<Str
     }
 }
 
-pub fn chat_reply(term: &str, what: &str, why: &str, history: &[CardMsg], message: &str, cancel: &crate::model::CancelToken) -> Result<String, String> {
+pub fn chat_reply(provider: &dyn crate::model::ModelProvider, term: &str, what: &str, why: &str, history: &[CardMsg], message: &str, cancel: &crate::model::CancelToken) -> Result<String, String> {
     let mut sys = format!(
         "You are explaining the concept '{}' to a builder. Lead with a DIRECT answer to their question, then add brief context. Be concrete and honest; never invent. Stay grounded in this concept.\n\n## Concept (DATA)\n- What: {}\n- Why: {}\n",
         fence_safe(term),
@@ -162,7 +162,7 @@ pub fn chat_reply(term: &str, what: &str, why: &str, history: &[CardMsg], messag
             sys.push_str(&format!("- {who}: {}\n", fence_safe(m.content.trim())));
         }
     }
-    Ok(run_once(message.trim().to_string(), &sys, cancel)?.trim().to_string())
+    Ok(run_once(provider, message.trim().to_string(), &sys, cancel)?.trim().to_string())
 }
 
 #[cfg(test)]

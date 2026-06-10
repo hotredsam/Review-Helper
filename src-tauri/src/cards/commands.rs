@@ -7,6 +7,8 @@ use tauri::State;
 
 use super::{generate_card, get as get_card, list as list_cards, normalize_domain, upsert, Card};
 use crate::db::Db;
+use crate::model::commands::provider_for;
+use crate::settings::load_model_config;
 
 /// Max length of a card term (chars) and a captured explanation (bytes).
 /// Bounds token cost and DB growth on the "too-large" input path.
@@ -92,9 +94,13 @@ pub async fn card_explain(
     };
 
     // Generate without holding the DB lock across the model call.
+    let provider = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        provider_for(&load_model_config(&conn))
+    };
     let run_key = format!("card:{}", term.to_lowercase());
     let token = crate::model::registry::register(&run_key);
-    let content = generate_card(&term, &token);
+    let content = generate_card(provider.as_ref(), &term, &token);
     crate::model::registry::finish(&run_key);
     let content = content?;
     let source = match existing_source.as_deref() {
@@ -150,12 +156,16 @@ pub fn card_project_terms(db: State<'_, Db>, project_id: i64) -> Result<Vec<Stri
 
 /// Fix the spelling/grammar of a typed term before it's explained + carded.
 #[tauri::command]
-pub async fn card_clean_term(term: String) -> Result<String, String> {
+pub async fn card_clean_term(db: State<'_, Db>, term: String) -> Result<String, String> {
     let t = term.trim();
     if t.is_empty() {
         return Err("Enter a term first.".into());
     }
-    super::study::clean_term(t, &crate::model::CancelToken::new())
+    let provider = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        provider_for(&load_model_config(&conn))
+    };
+    super::study::clean_term(provider.as_ref(), t, &crate::model::CancelToken::new())
 }
 
 /// 5–10 starter questions for a card; cached after the first generation.
@@ -169,7 +179,11 @@ pub async fn card_premade_questions(db: State<'_, Db>, term: String) -> Result<V
             return Ok(cached);
         }
     }
-    let qs = super::study::generate_questions(&term, &crate::model::CancelToken::new())?; // model call, no lock held
+    let provider = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        provider_for(&load_model_config(&conn))
+    };
+    let qs = super::study::generate_questions(provider.as_ref(), &term, &crate::model::CancelToken::new())?; // model call, no lock held
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     super::study::save_questions(&conn, &term, &qs)?;
     Ok(qs)
@@ -212,9 +226,13 @@ pub async fn card_chat_send(
         super::study::chat_add(&conn, project_id, &term, "user", &message)?;
         (what, why, history)
     };
+    let provider = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        provider_for(&load_model_config(&conn))
+    };
     let run_key = format!("cardchat:{project_id}:{}", term.to_lowercase());
     let token = crate::model::registry::register(&run_key);
-    let reply = super::study::chat_reply(&term, &what, &why, &history, &message, &token);
+    let reply = super::study::chat_reply(provider.as_ref(), &term, &what, &why, &history, &message, &token);
     crate::model::registry::finish(&run_key);
     let reply = reply?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;

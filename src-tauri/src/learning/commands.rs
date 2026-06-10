@@ -17,6 +17,8 @@ use super::store::{self, Subject, SubjectDetail};
 use super::tutor::{self, TutorMsg};
 use super::{mastery, schedule};
 use crate::db::Db;
+use crate::model::commands::provider_for;
+use crate::settings::load_model_config;
 
 const MAX_TITLE_CHARS: usize = 200;
 const MAX_SOURCE_CHARS: usize = 40_000;
@@ -112,7 +114,11 @@ pub async fn learning_intake(
 
     let run_key = format!("learning:{subject_id}");
     let token = crate::model::registry::register(&run_key);
-    let questions = intake::fetch_questions(&subject, &token); // model call, no DB lock held
+    let provider = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        provider_for(&load_model_config(&conn))
+    };
+    let questions = intake::fetch_questions(provider.as_ref(), &subject, &token); // model call, no DB lock held
     crate::model::registry::finish(&run_key);
     let questions = questions?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -160,7 +166,11 @@ pub async fn learning_propose(
 
     let run_key = format!("learning:{subject_id}");
     let token = crate::model::registry::register(&run_key);
-    let modules = propose::fetch_modules(&subject, &intake, &token); // model call, no DB lock
+    let provider = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        provider_for(&load_model_config(&conn))
+    };
+    let modules = propose::fetch_modules(provider.as_ref(), &subject, &intake, &token); // model call, no DB lock
     crate::model::registry::finish(&run_key);
     let modules = modules?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -224,7 +234,11 @@ pub async fn learning_notes(db: State<'_, Db>, gate: State<'_, LearningGate>, mo
     }
     let run_key = format!("learning:{module_id}");
     let token = crate::model::registry::register(&run_key);
-    let body = materials::fetch_notes(&subject, &m, &token); // model call, no DB lock
+    let provider = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        provider_for(&load_model_config(&conn))
+    };
+    let body = materials::fetch_notes(provider.as_ref(), &subject, &m, &token); // model call, no DB lock
     crate::model::registry::finish(&run_key);
     let body = body?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -255,7 +269,11 @@ pub async fn learning_flashcards(db: State<'_, Db>, gate: State<'_, LearningGate
     }
     let run_key = format!("learning:{module_id}");
     let token = crate::model::registry::register(&run_key);
-    let cards = materials::fetch_flashcards(&subject, &m, &token); // model call, no DB lock
+    let provider = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        provider_for(&load_model_config(&conn))
+    };
+    let cards = materials::fetch_flashcards(provider.as_ref(), &subject, &m, &token); // model call, no DB lock
     crate::model::registry::finish(&run_key);
     let cards = cards?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -286,13 +304,25 @@ pub async fn learning_quiz(db: State<'_, Db>, gate: State<'_, LearningGate>, mod
     }
     let run_key = format!("learning:{module_id}");
     let token = crate::model::registry::register(&run_key);
-    let questions = materials::fetch_quiz(&subject, &m, &token); // model call, no DB lock
+    let provider = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        provider_for(&load_model_config(&conn))
+    };
+    let questions = materials::fetch_quiz(provider.as_ref(), &subject, &m, &token); // model call, no DB lock
     crate::model::registry::finish(&run_key);
     let questions = questions?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     materials::quiz_save(&conn, module_id, m.subject_id, m.skill.as_deref().unwrap_or(""), &questions)?;
     materials::set_module_status(&conn, module_id, "ready")?;
     materials::quiz_list(&conn, module_id)
+}
+
+/// The study queue for a module: due cards first, then new cards up to the
+/// session cap, plus the next future due date for the empty state.
+#[tauri::command]
+pub fn learning_flashcards_queue(db: State<'_, Db>, module_id: i64) -> Result<materials::StudyQueue, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    materials::flashcards_queue(&conn, module_id)
 }
 
 // ---- L4: the adaptive engine (FSRS scheduling + BKT mastery + pace) ----
@@ -377,21 +407,30 @@ pub async fn learning_tutor_send(db: State<'_, Db>, subject_id: i64, message: St
     if message.chars().count() > 20_000 {
         return Err("Message is too long (max 20000 characters).".into());
     }
+    // The user message is NOT persisted yet: a failed model call must leave no
+    // orphaned turn (retry would duplicate it in history and in the prompt).
     let (subject, profile_block, hist) = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         let subject = store::get_subject(&conn, subject_id)?.ok_or("Subject not found.")?;
         let profile_block = profile::snapshot_prompt(&conn, subject_id)?;
         let hist = tutor::history(&conn, subject_id)?; // prior turns (before this message)
-        tutor::add(&conn, subject_id, "user", &message)?;
         (subject, profile_block, hist)
     };
     let run_key = format!("tutor:{subject_id}");
     let token = crate::model::registry::register(&run_key);
-    let reply = tutor::reply(&subject, &profile_block, &hist, &message, &token); // model call, no DB lock
+    let provider = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        provider_for(&load_model_config(&conn))
+    };
+    let reply = tutor::reply(provider.as_ref(), &subject, &profile_block, &hist, &message, &token); // model call, no DB lock
     crate::model::registry::finish(&run_key);
     let reply = reply?;
     let conn = db.0.lock().map_err(|e| e.to_string())?;
-    tutor::add(&conn, subject_id, "assistant", &reply)?;
+    // Both sides of the turn persist atomically — never an orphaned half.
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    tutor::add(&tx, subject_id, "user", &message)?;
+    tutor::add(&tx, subject_id, "assistant", &reply)?;
+    tx.commit().map_err(|e| e.to_string())?;
     Ok(reply)
 }
 

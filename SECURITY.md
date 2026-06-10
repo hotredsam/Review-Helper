@@ -23,6 +23,18 @@
   of that, the `ProjectContext` bundle marks recorded state as untrusted DATA and
   backtick-delimits each value — an advisory behavioral hint, not a hard control.
 
+## Trust model for imported content (deliberate decision, 2026-06-09)
+
+Imported repositories and uploaded documents are treated as **trusted input**.
+Model calls that read them keep WebSearch/WebFetch enabled by design — the
+owner accepted the prompt-injection/exfiltration tradeoff for a local,
+single-user tool whose normal inputs are his own repos and study materials.
+The exposed surface to be aware of: **Assess** is the one feature where
+third-party repositories are the expected input. If you import a repo you do
+not trust, know that its files are read by a model that can fetch URLs; a
+malicious README could exfiltrate anything else in that call's context.
+Revisit this decision before any multi-user or hosted distribution.
+
 ## Dependencies (all permissive licenses, justified)
 Rust (`src-tauri/Cargo.toml`):
 - `tauri`, `tauri-plugin-opener` — the app shell (MIT/Apache-2.0).

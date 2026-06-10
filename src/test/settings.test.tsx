@@ -48,3 +48,19 @@ describe("ProviderSettings", () => {
     expect(store.saved[store.saved.length - 1].api_credit_overflow).toBe(true);
   });
 });
+
+describe("ProviderSettings stub notice (Phase 17)", () => {
+  it("warns that Local is a stub when local is the active provider", async () => {
+    const { getModelConfig } = await import("../api/settings");
+    vi.mocked(getModelConfig).mockResolvedValueOnce({
+      provider: "local",
+      local_endpoint: null,
+      api_credit_overflow: false,
+    } as any);
+    const { ProviderSettings } = await import("../components/ProviderSettings");
+    const { render, screen } = await import("@testing-library/react");
+    render(<ProviderSettings />);
+    expect(await screen.findByRole("note")).toHaveTextContent(/local provider is a stub/i);
+    expect(screen.getByRole("note")).toHaveTextContent(/nothing spends Claude credits/i);
+  });
+});

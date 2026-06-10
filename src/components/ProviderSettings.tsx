@@ -41,6 +41,13 @@ export function ProviderSettings() {
 
   return (
     <div className="space-y-4">
+      {config.provider === "local" && (
+        <p className="rounded-md border border-border bg-surface-2 px-3 py-2 text-xs text-fg-muted" role="note">
+          The local provider is a stub: chat and every generator (plan, grill, learning, cards, assess)
+          will show a "configure me" notice instead of calling a model. Switch to Claude for real output —
+          nothing spends Claude credits while Local is selected.
+        </p>
+      )}
       <div
         role="radiogroup"
         aria-label="Provider"

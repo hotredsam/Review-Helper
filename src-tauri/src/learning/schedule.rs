@@ -29,13 +29,31 @@ fn rating_from(n: i64) -> Rating {
 /// Advance one flashcard by a grade and persist its new FSRS state. Pure DB +
 /// arithmetic (no model call), so it runs under the normal command lock.
 pub fn grade(conn: &Connection, flashcard_id: i64, rating_num: i64) -> Result<Graded, String> {
-    let (subject_id, skill, json): (i64, Option<String>, Option<String>) = conn
+    let (subject_id, skill, json, due_existing): (i64, Option<String>, Option<String>, Option<String>) = conn
         .query_row(
-            "SELECT subject_id, skill, fsrs_json FROM learning_flashcards WHERE id = ?1",
+            "SELECT subject_id, skill, fsrs_json, due FROM learning_flashcards WHERE id = ?1",
             [flashcard_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )
         .map_err(|_| "Flashcard not found.".to_string())?;
+
+    // Only queued reviews advance the scheduler: re-grading a card that isn't
+    // due yet (zero elapsed time) would corrupt its stability estimate, so the
+    // grade is acknowledged but the FSRS state is left alone.
+    if json.is_some() {
+        if let Some(due_str) = due_existing.as_deref() {
+            if let Ok(due_at) = chrono::DateTime::parse_from_rfc3339(due_str) {
+                if due_at > Utc::now() {
+                    return Ok(Graded {
+                        subject_id,
+                        skill: skill.unwrap_or_default(),
+                        due: due_str.to_string(),
+                        correct: rating_num >= 3,
+                    });
+                }
+            }
+        }
+    }
 
     // Resume the card's scheduling state, or start fresh on its first review.
     let card: Card = json
@@ -97,5 +115,23 @@ mod tests {
 
         let again = grade(&conn, 1, 1).unwrap(); // Again
         assert!(!again.correct, "Again counts as a lapse");
+    }
+
+    #[test]
+    fn re_grading_a_card_that_is_not_due_leaves_fsrs_state_alone() {
+        let conn = db();
+        let id: i64 = conn.query_row("SELECT id FROM learning_flashcards LIMIT 1", [], |r| r.get(0)).unwrap();
+        let first = grade(&conn, id, 4).unwrap(); // Easy → due lands in the future
+        let (json_before, reps_before): (String, i64) = conn
+            .query_row("SELECT fsrs_json, reps FROM learning_flashcards WHERE id = ?1", [id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+
+        let second = grade(&conn, id, 1).unwrap(); // immediate re-grade: not queued
+        assert_eq!(second.due, first.due, "due must not move for a non-due re-grade");
+        let (json_after, reps_after): (String, i64) = conn
+            .query_row("SELECT fsrs_json, reps FROM learning_flashcards WHERE id = ?1", [id], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!(json_before, json_after, "stability state must be untouched");
+        assert_eq!(reps_before, reps_after);
     }
 }

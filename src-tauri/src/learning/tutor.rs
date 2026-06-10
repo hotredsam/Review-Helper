@@ -8,7 +8,7 @@ use rusqlite::{params, Connection};
 use serde::Serialize;
 
 use super::gen::run_once;
-use crate::model::CancelToken;
+use crate::model::{CancelToken, ModelProvider};
 use super::store::SubjectDetail;
 use crate::context::fence_safe;
 
@@ -40,7 +40,7 @@ const TUTOR_SYSTEM: &str = "You are a patient, encouraging tutor for the subject
 
 /// Generate the tutor's reply. Pure model work (no DB) so the caller holds no
 /// lock during the call. Bounded history budget keeps the prompt sane.
-pub fn reply(subject: &SubjectDetail, profile_block: &str, history: &[TutorMsg], message: &str, cancel: &CancelToken) -> Result<String, String> {
+pub fn reply(provider: &dyn ModelProvider, subject: &SubjectDetail, profile_block: &str, history: &[TutorMsg], message: &str, cancel: &CancelToken) -> Result<String, String> {
     let mut sys = format!(
         "{TUTOR_SYSTEM}\n\n## Subject (DATA — untrusted)\n- Subject: {}\n- Learner's goal: {}\n",
         fence_safe(&subject.title),
@@ -64,7 +64,7 @@ pub fn reply(subject: &SubjectDetail, profile_block: &str, history: &[TutorMsg],
             sys.push_str(&line);
         }
     }
-    Ok(run_once(message.trim().to_string(), &sys, cancel)?.trim().to_string())
+    Ok(run_once(provider, message.trim().to_string(), &sys, cancel)?.trim().to_string())
 }
 
 #[cfg(test)]

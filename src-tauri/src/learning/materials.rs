@@ -8,7 +8,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use super::gen::{extract_json, run_once};
-use crate::model::CancelToken;
+use crate::model::{CancelToken, ModelProvider};
 use super::store::SubjectDetail;
 use crate::context::fence_safe;
 
@@ -76,8 +76,8 @@ pub fn notes_get(conn: &Connection, module_id: i64) -> Result<Option<String>, St
     .map_err(|e| e.to_string())
 }
 
-pub(super) fn fetch_notes(subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<String, String> {
-    let body = run_once(ground(subject, m), NOTES_SYSTEM, cancel)?;
+pub(super) fn fetch_notes(provider: &dyn ModelProvider, subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<String, String> {
+    let body = run_once(provider, ground(subject, m), NOTES_SYSTEM, cancel)?;
     let body = body.trim();
     if body.is_empty() {
         return Err("The notes came back empty.".into());
@@ -121,15 +121,13 @@ pub fn flashcards_list(conn: &Connection, module_id: i64) -> Result<Vec<Flashcar
     let mut stmt = conn
         .prepare("SELECT id, front, back, due, reps FROM learning_flashcards WHERE module_id = ?1 ORDER BY id")
         .map_err(|e| e.to_string())?;
-    stmt.query_map([module_id], |r| {
-        Ok(Flashcard { id: r.get(0)?, front: r.get(1)?, back: r.get(2)?, due: r.get(3)?, reps: r.get(4)? })
-    })
-    .and_then(Iterator::collect)
-    .map_err(|e| e.to_string())
+    stmt.query_map([module_id], flashcard_row)
+        .and_then(Iterator::collect)
+        .map_err(|e| e.to_string())
 }
 
-pub(super) fn fetch_flashcards(subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<Vec<(String, String)>, String> {
-    let text = run_once(ground(subject, m), FLASH_SYSTEM, cancel)?;
+pub(super) fn fetch_flashcards(provider: &dyn ModelProvider, subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<Vec<(String, String)>, String> {
+    let text = run_once(provider, ground(subject, m), FLASH_SYSTEM, cancel)?;
     let json = extract_json(&text)?;
     let set: CardSet = serde_json::from_str(json).map_err(|_| "The flashcards were malformed.".to_string())?;
     let cards: Vec<(String, String)> = set
@@ -146,14 +144,78 @@ pub(super) fn fetch_flashcards(subject: &SubjectDetail, m: &ModuleRow, cancel: &
 }
 
 pub(super) fn flashcards_save(conn: &Connection, module_id: i64, subject_id: i64, skill: &str, cards: &[(String, String)]) -> Result<(), String> {
+    // One transaction: a mid-loop failure must not cache a truncated deck
+    // (the pane would treat the partial set as the finished module forever).
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     for (front, back) in cards {
-        conn.execute(
+        tx.execute(
             "INSERT INTO learning_flashcards (module_id, subject_id, skill, front, back) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![module_id, subject_id, skill, front, back],
         )
         .map_err(|e| e.to_string())?;
     }
-    Ok(())
+    tx.commit().map_err(|e| e.to_string())
+}
+
+/// One study session's worth of cards: everything due now (soonest first), then
+/// never-graded cards up to the session cap. `next_due` feeds the "nothing due"
+/// empty state. This is where the persisted FSRS `due` finally drives what the
+/// learner sees (it was computed and indexed but never read).
+#[derive(Debug, Serialize)]
+pub struct StudyQueue {
+    pub cards: Vec<Flashcard>,
+    pub total: i64,
+    pub next_due: Option<String>,
+}
+
+/// New (never-graded) cards allowed into one session alongside the due ones.
+const NEW_CARD_CAP: i64 = 20;
+
+
+fn flashcard_row(r: &rusqlite::Row) -> rusqlite::Result<Flashcard> {
+    Ok(Flashcard { id: r.get(0)?, front: r.get(1)?, back: r.get(2)?, due: r.get(3)?, reps: r.get(4)? })
+}
+
+pub(super) fn flashcards_queue(conn: &Connection, module_id: i64) -> Result<StudyQueue, String> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut cards = Vec::new();
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, front, back, due, reps FROM learning_flashcards                  WHERE module_id = ?1 AND fsrs_json IS NOT NULL AND due IS NOT NULL AND due <= ?2                  ORDER BY due ASC",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![module_id, now], flashcard_row)
+            .map_err(|e| e.to_string())?;
+        for r in rows {
+            cards.push(r.map_err(|e| e.to_string())?);
+        }
+    }
+    {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, front, back, due, reps FROM learning_flashcards                  WHERE module_id = ?1 AND fsrs_json IS NULL ORDER BY id LIMIT ?2",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![module_id, NEW_CARD_CAP], flashcard_row)
+            .map_err(|e| e.to_string())?;
+        for r in rows {
+            cards.push(r.map_err(|e| e.to_string())?);
+        }
+    }
+    let total: i64 = conn
+        .query_row("SELECT COUNT(*) FROM learning_flashcards WHERE module_id = ?1", [module_id], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    let next_due: Option<String> = conn
+        .query_row(
+            "SELECT MIN(due) FROM learning_flashcards WHERE module_id = ?1 AND due IS NOT NULL AND due > ?2",
+            params![module_id, now],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(StudyQueue { cards, total, next_due })
 }
 
 // ---- quiz ----
@@ -205,8 +267,8 @@ pub fn quiz_list(conn: &Connection, module_id: i64) -> Result<Vec<QuizQuestion>,
         .collect())
 }
 
-pub(super) fn fetch_quiz(subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<Vec<ParsedQuiz>, String> {
-    let text = run_once(ground(subject, m), QUIZ_SYSTEM, cancel)?;
+pub(super) fn fetch_quiz(provider: &dyn ModelProvider, subject: &SubjectDetail, m: &ModuleRow, cancel: &CancelToken) -> Result<Vec<ParsedQuiz>, String> {
+    let text = run_once(provider, ground(subject, m), QUIZ_SYSTEM, cancel)?;
     let json = extract_json(&text)?;
     let set: QuizSet = serde_json::from_str(json).map_err(|_| "The quiz was malformed.".to_string())?;
     let questions: Vec<ParsedQuiz> = set
@@ -227,16 +289,17 @@ pub(super) fn fetch_quiz(subject: &SubjectDetail, m: &ModuleRow, cancel: &Cancel
 }
 
 pub(super) fn quiz_save(conn: &Connection, module_id: i64, subject_id: i64, skill: &str, questions: &[ParsedQuiz]) -> Result<(), String> {
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
     for q in questions {
         let options = serde_json::to_string(&q.options).map_err(|e| e.to_string())?;
-        conn.execute(
+        tx.execute(
             "INSERT INTO learning_quiz_questions (module_id, subject_id, skill, question, options, answer_idx, explanation) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![module_id, subject_id, skill, q.question.trim(), options, q.answer_idx, q.explanation.trim()],
         )
         .map_err(|e| e.to_string())?;
     }
-    Ok(())
+    tx.commit().map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -281,5 +344,49 @@ mod tests {
         assert_eq!(qs[0].options.len(), 4);
         assert_eq!(qs[0].answer_idx, 1);
         assert_eq!(qs[0].options[1], "4");
+    }
+
+    #[test]
+    fn queue_serves_due_first_then_capped_new_cards() {
+        let conn = db();
+        // 3 graded cards: two due in the past (out of order), one due far future.
+        // Plus 25 new (never-graded) cards — the cap must hold.
+        let mut ids = Vec::new();
+        for i in 0..28 {
+            conn.execute(
+                "INSERT INTO learning_flashcards (module_id, subject_id, skill, front, back) VALUES (1, 1, 's', ?1, 'b')",
+                [format!("card {i:02}")],
+            )
+            .unwrap();
+            ids.push(conn.last_insert_rowid());
+        }
+        conn.execute("UPDATE learning_flashcards SET fsrs_json='{}', due='2020-01-02T00:00:00+00:00' WHERE id = ?1", [ids[0]]).unwrap();
+        conn.execute("UPDATE learning_flashcards SET fsrs_json='{}', due='2020-01-01T00:00:00+00:00' WHERE id = ?1", [ids[1]]).unwrap();
+        conn.execute("UPDATE learning_flashcards SET fsrs_json='{}', due='2099-01-01T00:00:00+00:00' WHERE id = ?1", [ids[2]]).unwrap();
+
+        let q = flashcards_queue(&conn, 1).unwrap();
+        assert_eq!(q.total, 28);
+        // Due cards first, soonest due first.
+        assert_eq!(q.cards[0].id, ids[1]);
+        assert_eq!(q.cards[1].id, ids[0]);
+        // Then new cards, capped at 20; the far-future card is NOT in the queue.
+        assert_eq!(q.cards.len(), 2 + 20);
+        assert!(q.cards.iter().all(|c| c.id != ids[2]));
+        assert_eq!(q.next_due.as_deref(), Some("2099-01-01T00:00:00+00:00"));
+    }
+
+    #[test]
+    fn empty_queue_reports_the_next_due_date() {
+        let conn = db();
+        conn.execute(
+            "INSERT INTO learning_flashcards (module_id, subject_id, skill, front, back, fsrs_json, due) \
+             VALUES (1, 1, 's', 'f', 'b', '{}', '2099-06-01T00:00:00+00:00')",
+            [],
+        )
+        .unwrap();
+        let q = flashcards_queue(&conn, 1).unwrap();
+        assert!(q.cards.is_empty());
+        assert_eq!(q.total, 1);
+        assert_eq!(q.next_due.as_deref(), Some("2099-06-01T00:00:00+00:00"));
     }
 }

@@ -90,10 +90,44 @@ pub(crate) fn save_into_tx(tx: &Connection, project_id: i64, plan: &GeneratedPla
     }
 
     for d in &plan.decisions {
+        let topic = d.topic.trim();
+        if topic.is_empty() {
+            continue;
+        }
+        // Upsert by topic: a plan update refreshes the active record instead of
+        // re-inserting every decision as a new row on every rebuild. A topic the
+        // user superseded stays superseded — the plan never resurrects it.
+        let active: Option<i64> = tx
+            .query_row(
+                "SELECT id FROM decisions WHERE project_id = ?1 AND status = 'active' AND lower(topic) = lower(?2)",
+                params![project_id, topic],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        if let Some(id) = active {
+            tx.execute(
+                "UPDATE decisions SET choice = ?1, rationale = ?2, alternatives = ?3, consequences = ?4, plan_version = ?5 \
+                 WHERE id = ?6",
+                params![d.choice, opt(&d.rationale), opt(&d.alternatives), opt(&d.consequences), version, id],
+            )
+            .map_err(|e| e.to_string())?;
+            continue;
+        }
+        let superseded: bool = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM decisions WHERE project_id = ?1 AND lower(topic) = lower(?2))",
+                params![project_id, topic],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())?;
+        if superseded {
+            continue;
+        }
         tx.execute(
             "INSERT INTO decisions (project_id, topic, choice, rationale, alternatives, consequences, plan_version) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![project_id, d.topic, d.choice, opt(&d.rationale), opt(&d.alternatives), opt(&d.consequences), version],
+            params![project_id, topic, d.choice, opt(&d.rationale), opt(&d.alternatives), opt(&d.consequences), version],
         )
         .map_err(|e| e.to_string())?;
     }
@@ -596,5 +630,38 @@ mod tests {
         let warnings = carry_status(&mut conn, pid, v2).unwrap();
         assert_eq!(warnings.len(), 1, "the dropped completed phase is surfaced");
         assert!(warnings[0].contains("Done thing"));
+    }
+
+    #[test]
+    fn plan_updates_upsert_decisions_instead_of_duplicating() {
+        let mut conn = db();
+        conn.execute("INSERT INTO projects (name, kind) VALUES ('P','new')", []).unwrap();
+        let pid = conn.last_insert_rowid();
+        let mut plan = GeneratedPlan {
+            current_state: "x".into(),
+            body_md: "b".into(),
+            confidence: "low".into(),
+            notes: "".into(),
+            phases: vec![],
+            decisions: vec![GenDecision { topic: "Database".into(), choice: "SQLite".into(), rationale: "simple".into(), alternatives: "".into(), consequences: "".into() }],
+            stack: GenStack { frontend: None, backend: None, database: None, deployment: None, pipes: None },
+        };
+        save_generated_plan(&mut conn, pid, &plan).unwrap();
+        plan.decisions[0].choice = "Postgres".into();
+        save_generated_plan(&mut conn, pid, &plan).unwrap();
+
+        let (count, choice): (i64, String) = conn
+            .query_row("SELECT COUNT(*), MAX(choice) FROM decisions WHERE project_id = ?1", [pid], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!(count, 1, "rebuild must not duplicate the decision");
+        assert_eq!(choice, "Postgres", "the active row is refreshed in place");
+
+        // A superseded topic stays superseded — the plan never resurrects it.
+        conn.execute("UPDATE decisions SET status = 'superseded' WHERE project_id = ?1", [pid]).unwrap();
+        save_generated_plan(&mut conn, pid, &plan).unwrap();
+        let (count, status): (i64, String) = conn
+            .query_row("SELECT COUNT(*), MAX(status) FROM decisions WHERE project_id = ?1", [pid], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!((count, status.as_str()), (1, "superseded"));
     }
 }

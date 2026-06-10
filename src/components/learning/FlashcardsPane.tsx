@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, RotateCcw } from "lucide-react";
 import { modelStop } from "../../api/model";
-import { type Flashcard, learningFlashcards, learningFlashcardGrade } from "../../api/learning";
+import { type Flashcard, learningFlashcards, learningFlashcardsQueue, learningFlashcardGrade } from "../../api/learning";
 
 // FSRS grades. Again/Hard count as lapses; Good/Easy as recalled (drives mastery).
 const GRADES: { rating: 1 | 2 | 3 | 4; label: string; cls: string }[] = [
@@ -15,10 +15,24 @@ const GRADES: { rating: 1 | 2 | 3 | 4; label: string; cls: string }[] = [
  *  FSRS scheduler (when each card resurfaces) and the skill's mastery estimate. */
 export function FlashcardsPane({ moduleId }: { moduleId: number }) {
   const [cards, setCards] = useState<Flashcard[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [nextDue, setNextDue] = useState<string | null>(null);
   const [i, setI] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const loadQueue = (live: () => boolean) =>
+    // Generate + cache on first open, then ask the scheduler what's due now.
+    learningFlashcards(moduleId)
+      .then(() => learningFlashcardsQueue(moduleId))
+      .then((q) => {
+        if (!live()) return;
+        setCards(q.cards);
+        setTotal(q.total);
+        setNextDue(q.next_due);
+      })
+      .catch((e) => live() && setError(String(e)));
 
   useEffect(() => {
     let live = true;
@@ -27,12 +41,11 @@ export function FlashcardsPane({ moduleId }: { moduleId: number }) {
     setFlipped(false);
     setDone(false);
     setError(null);
-    learningFlashcards(moduleId)
-      .then((c) => live && setCards(c))
-      .catch((e) => live && setError(String(e)));
+    void loadQueue(() => live);
     return () => {
       live = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moduleId]);
 
   if (error) {
@@ -57,25 +70,40 @@ export function FlashcardsPane({ moduleId }: { moduleId: number }) {
     );
   }
   if (cards.length === 0) {
-    return <p className="text-sm text-fg-subtle">No flashcards in this module.</p>;
+    if (total === 0) {
+      return <p className="text-sm text-fg-subtle">No flashcards in this module.</p>;
+    }
+    const dueText = nextDue
+      ? new Date(nextDue).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+      : null;
+    return (
+      <div className="rounded-xl border border-border bg-surface p-8 text-center">
+        <p className="text-sm text-fg">Nothing due right now.</p>
+        <p className="mt-1 text-xs text-fg-subtle">
+          {dueText ? `Next card due ${dueText}.` : "All caught up."}
+        </p>
+      </div>
+    );
   }
 
-  const restart = () => {
+  const checkAgain = () => {
+    setCards(null);
     setI(0);
     setFlipped(false);
     setDone(false);
+    void loadQueue(() => true);
   };
 
   if (done) {
     return (
       <div className="rounded-xl border border-border bg-surface p-8 text-center">
-        <p className="text-sm text-fg">Reviewed all {cards.length} cards. They'll resurface when they're due.</p>
+        <p className="text-sm text-fg">Session complete — {cards.length} cards reviewed. They'll resurface when they're due.</p>
         <button
-          onClick={restart}
+          onClick={checkAgain}
           className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-fg-muted hover:bg-surface-2"
         >
           <RotateCcw className="h-4 w-4" />
-          Review again
+          Check for due cards
         </button>
       </div>
     );

@@ -184,7 +184,15 @@ fn run_chat(
             Ok(c) => c,
             Err(e) => return emit(ChatEvent::Failed { project_id, transcript_id, detail: e.to_string() }),
         };
-        let _ = store::add_message(&conn, transcript_id, "assistant", &reply);
+        if let Err(e) = store::add_message(&conn, transcript_id, "assistant", &reply) {
+            // The reply is on screen but didn't persist — say so instead of
+            // letting it silently vanish on the next launch.
+            return emit(ChatEvent::Failed {
+                project_id,
+                transcript_id,
+                detail: format!("The reply couldn't be saved (it will disappear on restart): {e}"),
+            });
+        }
         if parsed.is_empty() {
             0
         } else {

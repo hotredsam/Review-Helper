@@ -144,6 +144,18 @@ export function learningFlashcards(moduleId: number): Promise<Flashcard[]> {
   return invoke<Flashcard[]>("learning_flashcards", { moduleId });
 }
 
+/** One session's worth of cards: due first (soonest first), then new cards up
+ *  to the session cap. `next_due` feeds the "nothing due" empty state. */
+export interface StudyQueue {
+  cards: Flashcard[];
+  total: number;
+  next_due: string | null;
+}
+
+export function learningFlashcardsQueue(moduleId: number): Promise<StudyQueue> {
+  return invoke<StudyQueue>("learning_flashcards_queue", { moduleId });
+}
+
 export function learningQuiz(moduleId: number): Promise<QuizQuestion[]> {
   return invoke<QuizQuestion[]>("learning_quiz", { moduleId });
 }

@@ -49,24 +49,24 @@ pub fn init_connection(conn: &Connection) -> rusqlite::Result<()> {
 pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     if version < 1 {
-        conn.execute_batch(SCHEMA)?;
-        conn.pragma_update(None, "user_version", 1)?;
+        // A crash during a previous first launch can leave some tables created
+        // at user_version 0, which would brick every later launch on "table
+        // already exists". Nothing real exists before v1 completes, so clear
+        // any partial base schema and apply it atomically.
+        reset_partial_base(conn)?;
+        migration_step(conn, 1, |c| c.execute_batch(SCHEMA))?;
     }
     if version < 2 {
-        migrate_v2(conn)?;
-        conn.pragma_update(None, "user_version", 2)?;
+        migration_step(conn, 2, migrate_v2)?;
     }
     if version < 3 {
-        migrate_v3(conn)?;
-        conn.pragma_update(None, "user_version", 3)?;
+        migration_step(conn, 3, migrate_v3)?;
     }
     if version < 4 {
-        migrate_v4(conn)?;
-        conn.pragma_update(None, "user_version", 4)?;
+        migration_step(conn, 4, migrate_v4)?;
     }
     if version < 5 {
-        migrate_v5(conn)?;
-        conn.pragma_update(None, "user_version", 5)?;
+        migration_step(conn, 5, migrate_v5)?;
     }
     if version < 6 {
         migrate_v6(conn)?;
@@ -244,6 +244,38 @@ fn migrate_v3(conn: &Connection) -> rusqlite::Result<()> {
 /// case-variant duplicates onto the oldest row. Fresh databases already carry
 /// the NOCASE constraint from `schema.sql`, so the rebuild is a harmless no-op
 /// there; everything here is idempotent.
+/// Run one migration step atomically: the schema change and the version bump
+/// commit together, so a crash mid-step rolls back to a cleanly re-runnable
+/// state instead of stranding a half-applied version.
+fn migration_step(
+    conn: &Connection,
+    to_version: i64,
+    body: impl FnOnce(&Connection) -> rusqlite::Result<()>,
+) -> rusqlite::Result<()> {
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    match body(conn).and_then(|_| conn.pragma_update(None, "user_version", to_version)) {
+        Ok(()) => conn.execute_batch("COMMIT"),
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
+/// Drop any tables a pre-transactional first launch left behind at version 0.
+/// Table names are read from the schema itself so the list can't drift.
+fn reset_partial_base(conn: &Connection) -> rusqlite::Result<()> {
+    for line in SCHEMA.lines() {
+        let line = line.trim_start();
+        if let Some(rest) = line.strip_prefix("CREATE TABLE ") {
+            if let Some(name) = rest.split([' ', '(']).next() {
+                conn.execute_batch(&format!("DROP TABLE IF EXISTS {name};"))?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn migrate_v2(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
         "CREATE TABLE learning_cards_new (
@@ -333,5 +365,17 @@ mod tests {
             .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
             .unwrap();
         assert_eq!(on, 1);
+    }
+
+    #[test]
+    fn partial_base_schema_from_a_crashed_first_launch_recovers() {
+        // Simulate the pre-fix failure mode: some tables exist, user_version 0.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT);").unwrap();
+        run_migrations(&conn).expect("a partial base schema must not brick the app");
+        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert!(v >= 5);
+        // The real schema replaced the partial table (kind column exists).
+        conn.execute("INSERT INTO projects (name, kind) VALUES ('ok','new')", []).unwrap();
     }
 }
