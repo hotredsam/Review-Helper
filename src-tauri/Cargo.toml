@@ -29,7 +29,7 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 # GitHub token lives in the macOS Keychain (v3.6 + apple-native; v4 split the API).
 keyring = { version = "3.6", features = ["apple-native"] }
 # Blocking HTTP for the GitHub REST API + device flow (native-tls = Security framework).
-reqwest = { version = "0.12", features = ["blocking", "json"] }
+reqwest = { version = "0.13", features = ["blocking", "json"] }
 # Evidence-based spaced-repetition scheduler (FSRS) for Learning-mode flashcards.
 # Pure-Rust, MIT; `serde` lets us persist a card's scheduling state as JSON.
 rs-fsrs = { version = "1.2.1", features = ["serde"] }
