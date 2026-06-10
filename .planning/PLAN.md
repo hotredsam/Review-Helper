@@ -4,7 +4,7 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 
 ## Current state
 
-**All 14 phases are done.** The build is complete; the project is in continuous-improvement (council) mode. The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
+**Phases 1–14 and the A–H overhaul are done. Phases 15–19 (the audit overhaul) are next.** They come from the 2026-06-09 verified bug audit — 52 confirmed findings, full evidence in `.planning/AUDIT-2026-06-09.md`. Exit bar for 15–19: every fixed finding gets a regression test that fails on the old code, and the Phase 15 IPC contract suite stays green. The current phase is the first row below not marked `done`. Before any phase, run `/start-phase` (or the `phase-check` skill) to confirm prior phases are actually finished. Work one task at a time; stop after each for review. Tick a task's checkbox when its "Done when" check passes and you've committed; set a phase to `done` only after its phase-end verification passes. **Never rebuild a phase marked `done`.**
 
 ## How to execute
 
@@ -48,11 +48,17 @@ This is the index. Each phase lives in its own file under `.planning/phases/` so
 | 12 | `phases/phase-12-viz-firstrun.md` — visualization, first-run & polish | done |
 | 13 | `phases/phase-13-hardening.md` — production hardening | done |
 | 14 | `phases/phase-14-coming-soon.md` — coming-soon learning mode (stub) | done |
+| 15 | `phases/phase-15-destructive-safety.md` — destructive-action safety + IPC contract suite | planned |
+| 16 | `phases/phase-16-unfreeze-control.md` — unfreeze & control (async, timeouts, Stop) | planned |
+| 17 | `phases/phase-17-settings-truth.md` — settings truth & data integrity (provider, FSRS, transactions) | planned |
+| 18 | `phases/phase-18-polish-sweep.md` — polish sweep (races, UX, a11y, hygiene) | planned |
+| 19 | `phases/phase-19-voice-ingest.md` — live local Whisper mic + chunked document ingest | planned |
 
-Phases 1–13 build to production-ready; 14 is a stub. Order is by dependency — see each file's `Depends on`.
+Phases 1–13 build to production-ready; 14 is a stub. 15–19 fix the 2026-06-09 audit findings. Order is by dependency — see each file's `Depends on`.
 
 ## Open questions
 
-- **Audio transcription provider** — owner: you, during Phase 10. v1 ships a stub; wire local Whisper or an MCP server.
+- ~~**Audio transcription provider**~~ — resolved: Phase 19 wires live local Whisper (`large-v3-turbo-q5_0` via whisper-rs).
 - **Seed card list contents** — owner: decide during Phase 6 Task 1. The ~40–60 entries are tunable as you see which domains you lean on.
 - **App name** — owner: you, anytime. `Review Helper` matches the repo; not blocking.
+- **Real Ollama provider** — owner: you. Phase 17 wires `provider_for()` + capability-gates the Local stub; making Local genuinely usable via Ollama is a candidate Phase 20 with its own quality evals.

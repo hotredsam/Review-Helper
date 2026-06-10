@@ -1,0 +1,17 @@
+# Phase 15 — Destructive-action safety
+Status: planned
+Goal: No destructive action can hit the wrong target, fire unconfirmed, or fail silently — and a contract suite makes IPC drift visible forever after.
+Depends on: Phase 14 (and the A–H overhaul). Findings cited as A# live in `.planning/AUDIT-2026-06-09.md`.
+
+## Tasks
+- [ ] **T1 Remount panes on project switch** — add `key={active.id}` where MainPane renders the active pane tree so SyncPanel/ChatPane/PlanPane state can never survive a project switch (kills the stale-preview bug at the root, plus leaked chat drafts, kickoff text, and stale success banners). Done when: a test renders SyncPanel with a preview for project A, switches active project to B, and asserts the preview/confirm UI is gone.
+- [ ] **T2 Preview is project-bound; backend rejects mismatch** — `SyncPreview` gains a `project_id` field (Rust struct + TS type); `sync_main_apply` errors without executing anything if `preview.project_id != project_id`. The backend never again replays a preview from the wrong project. Done when: a Rust test calls apply with a mismatched preview and asserts an error with zero GitHub actions attempted.
+- [ ] **T3 Modal-confirm is the house standard** — every destructive action confirms through the shared `Modal.tsx` (focus trap, Escape, restore-focus): chat transcript delete (ChatHistoryRail), decision Supersede (DecisionsPane), Inbox Reject. Write the rule into CLAUDE.md ("destructive actions confirm via Modal; never `window.confirm` — it is dead under wry"). Done when: each action shows the Modal, Cancel/Escape aborts with no API call (asserted in tests), and CLAUDE.md carries the rule.
+- [ ] **T4 Resurrect Delete subject** — replace the dead `window.confirm` in SubjectDetail with the Modal confirm. (A13: wry implements no confirm panel, so the current button silently does nothing.) Done when: a test clicks Delete → Modal → confirm and asserts `remove(subjectId)` is actually called.
+- [ ] **T5 Surface delete failures** — `chatStore.removeTranscript` stops swallowing `chatDelete` errors: on failure the row stays and a `setNotice` toast explains; audit the other bare-catch deletes for the same fix. Done when: a test mocks a backend failure and asserts the transcript remains listed and the notice fires.
+- [ ] **T6 IPC contract suite** — a test that enumerates every `invoke()` call site in `src/api/` and asserts each command name and argument-key set matches a command registered in `lib.rs` (parse the `generate_handler!` list + Rust fn signatures). This closes the structural gap that let dead commands and dead buttons ship green (A50). Known-dead device-flow commands go on an explicit expected-dead list until Phase 18 resolves them. Done when: renaming a command, dropping a registration, or changing an arg key fails the suite.
+- [ ] **Tend Phase verification** — with two GitHub-linked projects: preview sync on A, switch to B, confirm no apply is possible; delete a chat (confirm + cancel paths); delete a subject; run the contract suite. Done when: all pass and both test suites are green.
+
+## Watch for (this phase)
+- `key={active.id}` resets pane-local state on every switch *by design* — confirm nothing legitimately depended on cross-project survival (per-project state belongs in the stores, which are already keyed by project id).
+- The contract suite must run in CI, not just locally — it is the phase's lasting artifact.
