@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-06-10)
 
 ## Corpus Check
-- 283 files · ~214,862 words
+- 293 files · ~215,627 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -523,7 +523,7 @@ Nodes (7): audit_list(), AuditEntry, Db, Result, State, String, Vec
 
 ### Community 80 - "Community 80"
 Cohesion: 0.21
-Nodes (8): commands, description, identifier, commands, description, identifier, deny-append, deny-identifier
+Nodes (8): commands, description, identifier, commands, description, identifier, allow-remove-at, deny-identifier
 
 ### Community 81 - "Community 81"
 Cohesion: 0.25
@@ -607,83 +607,83 @@ Nodes (4): commands, description, identifier, allow-popup
 
 ### Community 101 - "Community 101"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-prepend
+Nodes (4): commands, description, identifier, allow-register-listener
 
 ### Community 102 - "Community 102"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-register-listener
+Nodes (4): commands, description, identifier, allow-remove
 
 ### Community 103 - "Community 103"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-remove
+Nodes (4): commands, description, identifier, allow-set-accelerator
 
 ### Community 104 - "Community 104"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-remove-listener
+Nodes (4): commands, description, identifier, allow-set-as-app-menu
 
 ### Community 105 - "Community 105"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-set-accelerator
+Nodes (4): commands, description, identifier, allow-set-as-window-menu
 
 ### Community 106 - "Community 106"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-set-as-app-menu
+Nodes (4): commands, description, identifier, allow-set-as-windows-menu-for-nsapp
 
 ### Community 107 - "Community 107"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-set-as-window-menu
+Nodes (4): commands, description, identifier, allow-set-dock-visibility
 
 ### Community 108 - "Community 108"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-set-dock-visibility
+Nodes (4): commands, description, identifier, allow-set-icon
 
 ### Community 109 - "Community 109"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-set-icon
+Nodes (4): commands, description, identifier, allow-set-text
 
 ### Community 110 - "Community 110"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-set-text
+Nodes (4): commands, description, identifier, allow-supports-multiple-windows
 
 ### Community 111 - "Community 111"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-supports-multiple-windows
+Nodes (4): commands, description, identifier, allow-tauri-version
 
 ### Community 112 - "Community 112"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-tauri-version
+Nodes (4): commands, description, identifier, allow-text
 
 ### Community 113 - "Community 113"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, allow-text
+Nodes (4): commands, description, identifier, deny-bundle-type
 
 ### Community 114 - "Community 114"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, deny-bundle-type
+Nodes (4): commands, description, identifier, deny-create-default
 
 ### Community 115 - "Community 115"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, deny-create-default
+Nodes (4): commands, description, identifier, deny-default-window-icon
 
 ### Community 116 - "Community 116"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, deny-default-window-icon
+Nodes (4): commands, description, identifier, deny-fetch-data-store-identifiers
 
 ### Community 117 - "Community 117"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, deny-fetch-data-store-identifiers
+Nodes (4): commands, description, identifier, deny-get
 
 ### Community 118 - "Community 118"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, deny-get
+Nodes (4): commands, description, identifier, deny-is-checked
 
 ### Community 119 - "Community 119"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, deny-is-checked
+Nodes (4): commands, description, identifier, deny-name
 
 ### Community 120 - "Community 120"
 Cohesion: 0.50
-Nodes (4): commands, description, identifier, deny-name
+Nodes (4): commands, description, identifier, deny-remove-data-store
 
 ### Community 121 - "Community 121"
 Cohesion: 0.50
