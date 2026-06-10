@@ -11,7 +11,7 @@ jobs:
     # toolchain stay reproducible across runs.
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Secrets gate
         run: python3 scripts/scan_secrets.py $(git ls-files)
